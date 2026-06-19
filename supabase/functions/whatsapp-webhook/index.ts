@@ -158,8 +158,24 @@ serve(async (req) => {
   // B. RECEPCIÓN Y ENRUTAMIENTO DE MENSAJES (POST)
   // ==========================================
   if (req.method === "POST") {
+    let body: any = null
     try {
-      const body = await req.json()
+      body = await req.json()
+      
+      // Registrar log inicial de auditoría en la base de datos
+      await supabaseAdmin.from("webhook_logs").insert({
+        method: "POST",
+        url: req.url,
+        payload: body
+      })
+    } catch (logErr) {
+      console.error("Error al registrar log inicial:", logErr)
+    }
+
+    try {
+      if (!body) {
+        return new Response("Payload vacío", { status: 200 })
+      }
       
       // 1. Validar que la estructura del mensaje contenga datos válidos
       const entry = body.entry?.[0]
@@ -465,8 +481,21 @@ serve(async (req) => {
 
       return new Response("Mensaje procesado con éxito", { status: 200 })
 
-    } catch (err) {
+    } catch (err: any) {
       console.error("Fallo general en la ejecución del Webhook POST:", err)
+      
+      // Registrar el error de procesamiento en la base de datos
+      try {
+        await supabaseAdmin.from("webhook_logs").insert({
+          method: "POST",
+          url: req.url,
+          payload: body,
+          error_message: err.message
+        })
+      } catch (logErr) {
+        console.error("Error al registrar log de error:", logErr)
+      }
+
       // Respondemos con status 200 a Meta para que no siga reintentando infinitamente la misma petición con error
       return new Response(`Error interno: ${err.message}`, { status: 200 })
     }
