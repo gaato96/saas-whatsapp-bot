@@ -3,7 +3,7 @@ import Link from 'next/link'
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-black text-zinc-100 font-sans selection:bg-zinc-800 relative overflow-hidden flex flex-col justify-between">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans selection:bg-zinc-800 relative overflow-hidden flex flex-col justify-between">
       {/* Patrón de Grilla de Fondo */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#1f2023_1px,transparent_1px),linear-gradient(to_bottom,#1f2023_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-30 pointer-events-none" />
       
