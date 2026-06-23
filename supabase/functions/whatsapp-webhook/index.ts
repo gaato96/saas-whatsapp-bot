@@ -1,32 +1,64 @@
 // =========================================================================
 // SUPABASE EDGE FUNCTION: whatsapp-webhook
-// CENTRAL MULTI-TENANT WEBHOOK FOR WHATSAPP CLOUD API & GOOGLE GEMINI 2.5 FLASH
+// CENTRAL MULTI-TENANT WEBHOOK FOR WHATSAPP CLOUD API & GOOGLE GEMINI
 // =========================================================================
+
+// Modelos de Gemini en orden de prioridad (el primero es el principal, el resto son fallbacks)
+// gemini-2.5-flash es el mejor pero puede saturarse; gemini-1.5-flash es el estable de producción
+const GEMINI_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-1.5-flash",
+]
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
-// Helper para realizar peticiones fetch con reintentos y backoff exponencial (útil para la API de Gemini)
-async function fetchWithRetry(url: string, options: RequestInit, retries = 3, delay = 1000): Promise<Response> {
-  for (let i = 0; i < retries; i++) {
+// Helper: llama a Gemini con fallback automático entre modelos si alguno está sobrecargado (503/429)
+async function callGeminiWithFallback(body: object, apiKey: string, timeoutMs = 15000): Promise<any> {
+  let lastError: Error | null = null
+  for (const model of GEMINI_MODELS) {
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
     try {
-      const response = await fetch(url, options)
-      // Si responde 503 (Servicio no disponible) o 429 (Límite de peticiones), reintentar
+      console.log(`Intentando con modelo: ${model}`)
+      const response = await fetch(geminiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      })
+      clearTimeout(timeoutId)
       if (response.status === 503 || response.status === 429) {
-        console.warn(`Gemini API respondió con ${response.status}. Reintentando en ${delay}ms... (Intento ${i + 1}/${retries})`)
-        await new Promise(resolve => setTimeout(resolve, delay))
-        delay *= 2 // Backoff exponencial
+        const errText = await response.text()
+        console.warn(`Modelo ${model} respondió ${response.status} (sobrecargado). Cambiando al siguiente modelo...`)
+        lastError = new Error(`${model} respondió ${response.status}: ${errText}`)
+        continue // Probar con el siguiente modelo del array
+      }
+      if (!response.ok) {
+        const errText = await response.text()
+        throw new Error(`Error de Gemini API con modelo ${model}: ${errText}`)
+      }
+      const data = await response.json()
+      console.log(`Respuesta exitosa con modelo: ${model}`)
+      return data
+    } catch (err: any) {
+      clearTimeout(timeoutId)
+      if (err.name === "AbortError") {
+        console.warn(`Timeout con modelo ${model}. Cambiando al siguiente...`)
+        lastError = new Error(`Timeout con modelo ${model}`)
         continue
       }
-      return response
-    } catch (err: any) {
-      if (i === retries - 1) throw err
-      console.warn(`Error en petición Gemini API: ${err.message}. Reintentando en ${delay}ms...`)
-      await new Promise(resolve => setTimeout(resolve, delay))
-      delay *= 2
+      // Si es un error de red/código, intentar con el siguiente modelo
+      if (lastError || GEMINI_MODELS.indexOf(model) < GEMINI_MODELS.length - 1) {
+        console.warn(`Error con modelo ${model}: ${err.message}. Cambiando al siguiente...`)
+        lastError = err
+        continue
+      }
+      throw err
     }
   }
-  throw new Error("Se superó el número máximo de reintentos en la llamada a Gemini")
+  throw lastError || new Error("Todos los modelos de Gemini fallaron")
 }
 
 // Variables de entorno de Supabase
@@ -211,7 +243,7 @@ async function transcribeAudio(mediaId: string, waToken: string): Promise<string
   const audioBase64 = arrayBufferToBase64(audioBuffer)
 
   // Paso 3: Enviar el audio a Gemini para transcripción
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
+  // Transcribir con fallback automático entre modelos Gemini
   const transcriptionPayload = {
     contents: [{
       role: "user",
@@ -229,26 +261,7 @@ async function transcribeAudio(mediaId: string, waToken: string): Promise<string
     }]
   }
 
-  const controller3 = new AbortController()
-  const timeoutId3 = setTimeout(() => controller3.abort(), 15000) // 15 segundos de timeout
-  let geminiRes
-  try {
-    geminiRes = await fetchWithRetry(geminiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(transcriptionPayload),
-      signal: controller3.signal
-    }, 3, 1000)
-  } catch (err: any) {
-    throw new Error(`Timeout o error al transcribir audio en Gemini API: ${err.message}`)
-  } finally {
-    clearTimeout(timeoutId3)
-  }
-
-  if (!geminiRes.ok) {
-    throw new Error(`Error de Gemini al transcribir audio: ${await geminiRes.text()}`)
-  }
-  const geminiData = await geminiRes.json()
+  const geminiData = await callGeminiWithFallback(transcriptionPayload, GEMINI_API_KEY, 15000)
   const transcript = geminiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ""
   return transcript
 }
@@ -575,42 +588,20 @@ serve(async (req) => {
         // C. CONEXIÓN CON LA API DE GEMINI 2.5 FLASH
         // ==========================================
         const callGemini = async (conversationContents: any[]) => {
-          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
-          
           const payload = {
             contents: conversationContents,
             systemInstruction: {
               parts: [{ text: systemPrompt }]
             },
             generationConfig: {
-              temperature: 0.2, // Baja temperatura para mantener rigidez en lógica de venta y stock
+              temperature: 0.2,
               maxOutputTokens: 1000
             }
           }
 
-          const controller = new AbortController()
-          const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 segundos de timeout
-
-          try {
-            const response = await fetchWithRetry(geminiUrl, {
-              method: "POST",
-              signal: controller.signal,
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(payload)
-            }, 3, 1000)
-
-            if (!response.ok) {
-              const errText = await response.text()
-              throw new Error(`Error en llamada a Gemini API: ${errText}`)
-            }
-
-            const data = await response.json()
-            return data.candidates?.[0]?.content?.parts?.[0]?.text || ""
-          } catch (err: any) {
-            throw new Error(`Timeout o error al llamar a Gemini API: ${err.message}`)
-          } finally {
-            clearTimeout(timeoutId)
-          }
+          // Usar fallback automático entre modelos si el principal está saturado
+          const data = await callGeminiWithFallback(payload, GEMINI_API_KEY, 15000)
+          return data.candidates?.[0]?.content?.parts?.[0]?.text || ""
         }
 
         console.log("Invocando a Gemini 2.5 Flash...")
