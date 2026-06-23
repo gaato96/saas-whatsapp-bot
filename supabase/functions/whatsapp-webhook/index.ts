@@ -137,7 +137,8 @@ async function transcribeAudio(mediaId: string, waToken: string): Promise<string
   }
   const mediaInfo = await mediaInfoRes.json()
   const mediaUrl: string = mediaInfo.url
-  const mimeType: string = mediaInfo.mime_type || "audio/ogg"
+  // Limpiar el tipo mime (ej: "audio/ogg; codecs=opus" -> "audio/ogg") ya que Gemini es sensible a los codecs en el string
+  const mimeType = (mediaInfo.mime_type || "audio/ogg").split(";")[0].trim()
 
   // Paso 2: Descargar el binario del archivo de audio
   const audioDownloadRes = await fetch(mediaUrl, {
@@ -147,7 +148,14 @@ async function transcribeAudio(mediaId: string, waToken: string): Promise<string
     throw new Error(`No se pudo descargar el archivo de audio: ${await audioDownloadRes.text()}`)
   }
   const audioBuffer = await audioDownloadRes.arrayBuffer()
-  const audioBase64 = btoa(String.fromCharCode(...new Uint8Array(audioBuffer)))
+  
+  // Convertir a base64 de forma segura usando un bucle iterativo para evitar "Maximum call stack size exceeded" con archivos >65KB
+  const bytes = new Uint8Array(audioBuffer)
+  let binary = ""
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  const audioBase64 = btoa(binary)
 
   // Paso 3: Enviar el audio a Gemini para transcripción
   const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
