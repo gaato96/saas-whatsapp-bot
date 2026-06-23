@@ -3,11 +3,12 @@
 // CENTRAL MULTI-TENANT WEBHOOK FOR WHATSAPP CLOUD API & GOOGLE GEMINI
 // =========================================================================
 
-// Modelos de Gemini en orden de prioridad (el primero es el principal, el resto son fallbacks)
-// gemini-2.5-flash es el mejor pero puede saturarse; gemini-1.5-flash es el estable de producción
+// Modelos de Gemini en orden de prioridad.
+// Si el principal se satura (503/429/404), se pasa automáticamente al siguiente.
 const GEMINI_MODELS = [
-  "gemini-2.5-flash",
-  "gemini-1.5-flash",
+  "gemini-2.5-flash",        // Principal: máxima calidad
+  "gemini-2.5-flash-lite",   // Fallback 1: versión ligera del mismo modelo
+  "gemini-1.5-flash-latest", // Fallback 2: versión estable de producción
 ]
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
@@ -29,11 +30,11 @@ async function callGeminiWithFallback(body: object, apiKey: string, timeoutMs = 
         signal: controller.signal
       })
       clearTimeout(timeoutId)
-      if (response.status === 503 || response.status === 429) {
+      if (response.status === 503 || response.status === 429 || response.status === 404) {
         const errText = await response.text()
-        console.warn(`Modelo ${model} respondió ${response.status} (sobrecargado). Cambiando al siguiente modelo...`)
-        lastError = new Error(`${model} respondió ${response.status}: ${errText}`)
-        continue // Probar con el siguiente modelo del array
+        console.warn(`Modelo ${model} respondió ${response.status}. Cambiando al siguiente modelo...`)
+        lastError = new Error(`${model} error ${response.status}: ${errText.slice(0, 200)}`)
+        continue
       }
       if (!response.ok) {
         const errText = await response.text()
@@ -167,6 +168,10 @@ REGLAS GENERALES DE COMPORTAMIENTO:
 - Responde de forma concisa, cálida y directa. Los mensajes deben ser fáciles de leer en dispositivos móviles (utiliza negritas para destacar precios, nombres de productos o pasos clave).
 - Mantén el hilo de la conversación (memoria de lo que el cliente va pidiendo) mediante el historial que se te provee.
 - Si el cliente es confuso, es grosero o solicita explícitamente hablar con una persona/humano, escribe la etiqueta exacta al final de tu mensaje: [HUMAN_REQUIRED]
+
+REGLAS DE FORMATO PARA WHATSAPP (OBLIGATORIO):
+- NUNCA uses el formato Markdown de enlaces [texto](url). WhatsApp NO lo soporta y hace que la URL aparezca duplicada en la pantalla del usuario.
+- Cuando debas compartir un enlace, escríbelo siempre de forma directa en el texto. Ejemplo CORRECTO: "Agendá tu reunión aquí: https://calendly.com/ejemplo" — Ejemplo INCORRECTO: "[Agendá aquí](https://calendly.com/ejemplo)"
 
 CATÁLOGO DE PRODUCTOS / SERVICIOS DISPONIBLES:
 ${catalogText}
@@ -727,6 +732,7 @@ serve(async (req) => {
         }
       } catch (err: any) {
         console.error("Fallo general en la ejecución del Webhook POST (segundo plano):", err)
+        // Registrar el error en logs
         try {
           await supabaseAdmin.from("webhook_logs").insert({
             method: "POST",
@@ -736,6 +742,36 @@ serve(async (req) => {
           })
         } catch (logErr) {
           console.error("Error al registrar log de error:", logErr)
+        }
+        // CRÍTICO: Siempre enviar un mensaje de cortesía al usuario para que NUNCA quede en silencio
+        try {
+          const errValue = body?.entry?.[0]?.changes?.[0]?.value
+          const errMsgObj = errValue?.messages?.[0]
+          const errPhone = errMsgObj?.from
+          const errPhoneId = errValue?.metadata?.phone_number_id
+          if (errPhone && errPhoneId) {
+            const { data: errBiz } = await supabaseAdmin
+              .from("businesses")
+              .select("whatsapp_config")
+              .eq("whatsapp_config->>phone_number_id", errPhoneId)
+              .maybeSingle()
+            const errToken = errBiz?.whatsapp_config?.access_token
+            if (errToken) {
+              await fetch(`https://graph.facebook.com/v22.0/${errPhoneId}/messages`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${errToken}` },
+                body: JSON.stringify({
+                  messaging_product: "whatsapp",
+                  to: errPhone,
+                  type: "text",
+                  text: { body: "Disculpá, estoy teniendo dificultades técnicas en este momento. Por favor, intentá de nuevo en unos segundos. 🙏" }
+                })
+              })
+              console.log("Mensaje de cortesía de error enviado al usuario.")
+            }
+          }
+        } catch (notifyErr) {
+          console.error("No se pudo enviar el mensaje de cortesía de error:", notifyErr)
         }
       }
     })()
