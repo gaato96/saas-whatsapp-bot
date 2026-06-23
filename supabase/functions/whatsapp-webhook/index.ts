@@ -6,6 +6,29 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
+// Helper para realizar peticiones fetch con reintentos y backoff exponencial (útil para la API de Gemini)
+async function fetchWithRetry(url: string, options: RequestInit, retries = 3, delay = 1000): Promise<Response> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url, options)
+      // Si responde 503 (Servicio no disponible) o 429 (Límite de peticiones), reintentar
+      if (response.status === 503 || response.status === 429) {
+        console.warn(`Gemini API respondió con ${response.status}. Reintentando en ${delay}ms... (Intento ${i + 1}/${retries})`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+        delay *= 2 // Backoff exponencial
+        continue
+      }
+      return response
+    } catch (err: any) {
+      if (i === retries - 1) throw err
+      console.warn(`Error en petición Gemini API: ${err.message}. Reintentando en ${delay}ms...`)
+      await new Promise(resolve => setTimeout(resolve, delay))
+      delay *= 2
+    }
+  }
+  throw new Error("Se superó el número máximo de reintentos en la llamada a Gemini")
+}
+
 // Variables de entorno de Supabase
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || ""
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
@@ -207,15 +230,15 @@ async function transcribeAudio(mediaId: string, waToken: string): Promise<string
   }
 
   const controller3 = new AbortController()
-  const timeoutId3 = setTimeout(() => controller3.abort(), 8000) // 8 segundos de timeout
+  const timeoutId3 = setTimeout(() => controller3.abort(), 15000) // 15 segundos de timeout
   let geminiRes
   try {
-    geminiRes = await fetch(geminiUrl, {
+    geminiRes = await fetchWithRetry(geminiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(transcriptionPayload),
       signal: controller3.signal
-    })
+    }, 3, 1000)
   } catch (err: any) {
     throw new Error(`Timeout o error al transcribir audio en Gemini API: ${err.message}`)
   } finally {
@@ -295,18 +318,31 @@ serve(async (req) => {
 
     // Procesar en segundo plano para responderle a Meta en menos de 3 segundos
     const processPromise = (async () => {
+      // 1. Forzar una pausa corta para permitir que la respuesta 200 OK se envíe y limpie el socket de Meta
+      await new Promise(resolve => setTimeout(resolve, 100))
+
       try {
-        // Registrar log inicial de auditoría en la base de datos (en segundo plano)
+        // 2. Registrar log inicial en segundo plano y obtener su ID
+        let currentLogId = null
         try {
-          await supabaseAdmin.from("webhook_logs").insert({
-            method: "POST",
-            url: req.url,
-            payload: body
-          })
+          const { data: logRes, error: logErr } = await supabaseAdmin
+            .from("webhook_logs")
+            .insert({
+              method: "POST",
+              url: req.url,
+              payload: body
+            })
+            .select("id")
+            .single()
+          
+          if (!logErr && logRes) {
+            currentLogId = logRes.id
+          }
         } catch (logErr) {
           console.error("Error al registrar log inicial:", logErr)
         }
-        // 1. Validar que la estructura del mensaje contenga datos válidos
+
+        // 3. Validar estructura del mensaje
         const entry = body.entry?.[0]
         const change = entry?.changes?.[0]
         const value = change?.value
@@ -316,7 +352,7 @@ serve(async (req) => {
           return
         }
 
-        // Validar si es una notificación de entrega/lectura (no procesamos loops)
+        // Ignorar notificaciones de estado (lectura, entrega)
         if (value.statuses) {
           return
         }
@@ -325,6 +361,30 @@ serve(async (req) => {
         if (!messageObj) {
           console.log("Sin mensajes nuevos en el payload")
           return
+        }
+
+        // 4. Control de duplicados en segundo plano: consultar logs recientes y comparar en JS
+        const messageId = messageObj.id
+        if (messageId && currentLogId) {
+          try {
+            const { data: recentLogs } = await supabaseAdmin
+              .from("webhook_logs")
+              .select("id, payload")
+              .order("created_at", { ascending: false })
+              .limit(20)
+            
+            const isDuplicate = recentLogs?.some(log => 
+              log.id !== currentLogId && 
+              log.payload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.id === messageId
+            )
+            
+            if (isDuplicate) {
+              console.log(`Mensaje duplicado detectado en JS (ID: ${messageId}). Cancelando procesamiento de este hilo.`)
+              return
+            }
+          } catch (dupErr) {
+            console.error("Error buscando duplicados:", dupErr)
+          }
         }
 
         const customerPhone = messageObj.from
@@ -529,15 +589,15 @@ serve(async (req) => {
           }
 
           const controller = new AbortController()
-          const timeoutId = setTimeout(() => controller.abort(), 8000) // 8 segundos de timeout
+          const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 segundos de timeout
 
           try {
-            const response = await fetch(geminiUrl, {
+            const response = await fetchWithRetry(geminiUrl, {
               method: "POST",
               signal: controller.signal,
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(payload)
-            })
+            }, 3, 1000)
 
             if (!response.ok) {
               const errText = await response.text()
