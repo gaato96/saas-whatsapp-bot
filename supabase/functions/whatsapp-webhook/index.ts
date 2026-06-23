@@ -6,16 +6,19 @@
 // Modelos de Gemini en orden de prioridad — nombres verificados contra la API de Google.
 // Si el principal se satura (503/429/404), se pasa automáticamente al siguiente.
 const GEMINI_MODELS = [
-  "gemini-2.5-flash",      // Principal: máxima calidad (puede saturarse en picos)
-  "gemini-2.5-flash-lite", // Fallback 1: versión ligera del mismo modelo
-  "gemini-2.0-flash",      // Fallback 2: estable, siempre disponible, en ciclo de soporte activo
+  "gemini-2.5-flash",      // Principal: excelente rendimiento (el preferido del negocio)
+  "gemini-2.5-flash-lite", // Fallback 1: versión liviana del 2.5
+  "gemini-3.1-flash-lite", // Fallback 2: versión liviana de última generación (muy estable en picos)
+  "gemini-3.5-flash",      // Fallback 3: modelo de última generación de alta velocidad
+  "gemini-2.0-flash",      // Fallback 4: modelo de generación anterior (en proceso de sunset)
+  "gemini-flash-latest",   // Fallback 5: versión 1.5 Flash (legacy de respaldo definitivo)
 ]
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 // Helper: llama a Gemini con fallback automático entre modelos si alguno está sobrecargado (503/429)
-async function callGeminiWithFallback(body: object, apiKey: string, timeoutMs = 15000): Promise<any> {
+async function callGeminiWithFallback(body: object, apiKey: string, timeoutMs = 5000): Promise<any> {
   let lastError: Error | null = null
   for (const model of GEMINI_MODELS) {
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
@@ -266,7 +269,7 @@ async function transcribeAudio(mediaId: string, waToken: string): Promise<string
     }]
   }
 
-  const geminiData = await callGeminiWithFallback(transcriptionPayload, GEMINI_API_KEY, 15000)
+  const geminiData = await callGeminiWithFallback(transcriptionPayload, GEMINI_API_KEY, 5000)
   const transcript = geminiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ""
   return transcript
 }
@@ -605,7 +608,7 @@ serve(async (req) => {
           }
 
           // Usar fallback automático entre modelos si el principal está saturado
-          const data = await callGeminiWithFallback(payload, GEMINI_API_KEY, 15000)
+          const data = await callGeminiWithFallback(payload, GEMINI_API_KEY, 5000)
           return data.candidates?.[0]?.content?.parts?.[0]?.text || ""
         }
 
