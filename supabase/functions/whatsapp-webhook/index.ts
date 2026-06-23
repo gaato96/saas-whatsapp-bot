@@ -122,15 +122,41 @@ IMPORTANTE: Reemplaza "UUID" en la etiqueta de orden por el ID de catálogo exac
 `;
 }
 
+// Helper para convertir ArrayBuffer a Base64 en bloques para evitar RangeError y optimizar velocidad
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const len = bytes.byteLength;
+  const chunk = 8000;
+  for (let i = 0; i < len; i += chunk) {
+    binary += String.fromCharCode.apply(
+      null,
+      bytes.subarray(i, i + chunk) as any
+    );
+  }
+  return btoa(binary);
+}
+
 // =========================================================================
 // 2. TRANSCRIPCIÓN DE AUDIO CON GEMINI
 // Descarga el archivo de voz enviado por WhatsApp y lo transcribe con IA.
 // =========================================================================
 async function transcribeAudio(mediaId: string, waToken: string): Promise<string> {
   // Paso 1: Obtener la URL de descarga del archivo de audio en los servidores de Meta
-  const mediaInfoRes = await fetch(`https://graph.facebook.com/v22.0/${mediaId}`, {
-    headers: { Authorization: `Bearer ${waToken}` }
-  })
+  const controller1 = new AbortController()
+  const timeoutId1 = setTimeout(() => controller1.abort(), 6000) // 6 segundos de timeout
+  let mediaInfoRes
+  try {
+    mediaInfoRes = await fetch(`https://graph.facebook.com/v22.0/${mediaId}`, {
+      headers: { Authorization: `Bearer ${waToken}` },
+      signal: controller1.signal
+    })
+  } catch (err: any) {
+    throw new Error(`Timeout o error de red al obtener info de audio de Meta: ${err.message}`)
+  } finally {
+    clearTimeout(timeoutId1)
+  }
+
   if (!mediaInfoRes.ok) {
     const err = await mediaInfoRes.text()
     throw new Error(`No se pudo obtener la info del audio de Meta: ${err}`)
@@ -141,21 +167,25 @@ async function transcribeAudio(mediaId: string, waToken: string): Promise<string
   const mimeType = (mediaInfo.mime_type || "audio/ogg").split(";")[0].trim()
 
   // Paso 2: Descargar el binario del archivo de audio
-  const audioDownloadRes = await fetch(mediaUrl, {
-    headers: { Authorization: `Bearer ${waToken}` }
-  })
+  const controller2 = new AbortController()
+  const timeoutId2 = setTimeout(() => controller2.abort(), 8000) // 8 segundos de timeout
+  let audioDownloadRes
+  try {
+    audioDownloadRes = await fetch(mediaUrl, {
+      headers: { Authorization: `Bearer ${waToken}` },
+      signal: controller2.signal
+    })
+  } catch (err: any) {
+    throw new Error(`Timeout o error de red al descargar audio de Meta: ${err.message}`)
+  } finally {
+    clearTimeout(timeoutId2)
+  }
+
   if (!audioDownloadRes.ok) {
     throw new Error(`No se pudo descargar el archivo de audio: ${await audioDownloadRes.text()}`)
   }
   const audioBuffer = await audioDownloadRes.arrayBuffer()
-  
-  // Convertir a base64 de forma segura usando un bucle iterativo para evitar "Maximum call stack size exceeded" con archivos >65KB
-  const bytes = new Uint8Array(audioBuffer)
-  let binary = ""
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i])
-  }
-  const audioBase64 = btoa(binary)
+  const audioBase64 = arrayBufferToBase64(audioBuffer)
 
   // Paso 3: Enviar el audio a Gemini para transcripción
   const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
@@ -176,11 +206,22 @@ async function transcribeAudio(mediaId: string, waToken: string): Promise<string
     }]
   }
 
-  const geminiRes = await fetch(geminiUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(transcriptionPayload)
-  })
+  const controller3 = new AbortController()
+  const timeoutId3 = setTimeout(() => controller3.abort(), 8000) // 8 segundos de timeout
+  let geminiRes
+  try {
+    geminiRes = await fetch(geminiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(transcriptionPayload),
+      signal: controller3.signal
+    })
+  } catch (err: any) {
+    throw new Error(`Timeout o error al transcribir audio en Gemini API: ${err.message}`)
+  } finally {
+    clearTimeout(timeoutId3)
+  }
+
   if (!geminiRes.ok) {
     throw new Error(`Error de Gemini al transcribir audio: ${await geminiRes.text()}`)
   }
@@ -243,15 +284,9 @@ serve(async (req) => {
     let body: any = null
     try {
       body = await req.json()
-      
-      // Registrar log inicial de auditoría en la base de datos
-      await supabaseAdmin.from("webhook_logs").insert({
-        method: "POST",
-        url: req.url,
-        payload: body
-      })
-    } catch (logErr) {
-      console.error("Error al registrar log inicial:", logErr)
+    } catch (err) {
+      console.error("Error al parsear JSON del payload:", err)
+      return new Response("JSON inválido", { status: 400 })
     }
 
     if (!body) {
@@ -261,6 +296,16 @@ serve(async (req) => {
     // Procesar en segundo plano para responderle a Meta en menos de 3 segundos
     const processPromise = (async () => {
       try {
+        // Registrar log inicial de auditoría en la base de datos (en segundo plano)
+        try {
+          await supabaseAdmin.from("webhook_logs").insert({
+            method: "POST",
+            url: req.url,
+            payload: body
+          })
+        } catch (logErr) {
+          console.error("Error al registrar log inicial:", logErr)
+        }
         // 1. Validar que la estructura del mensaje contenga datos válidos
         const entry = body.entry?.[0]
         const change = entry?.changes?.[0]
@@ -483,19 +528,29 @@ serve(async (req) => {
             }
           }
 
-          const response = await fetch(geminiUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-          })
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 8000) // 8 segundos de timeout
 
-          if (!response.ok) {
-            const errText = await response.text()
-            throw new Error(`Error en llamada a Gemini API: ${errText}`)
+          try {
+            const response = await fetch(geminiUrl, {
+              method: "POST",
+              signal: controller.signal,
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload)
+            })
+
+            if (!response.ok) {
+              const errText = await response.text()
+              throw new Error(`Error en llamada a Gemini API: ${errText}`)
+            }
+
+            const data = await response.json()
+            return data.candidates?.[0]?.content?.parts?.[0]?.text || ""
+          } catch (err: any) {
+            throw new Error(`Timeout o error al llamar a Gemini API: ${err.message}`)
+          } finally {
+            clearTimeout(timeoutId)
           }
-
-          const data = await response.json()
-          return data.candidates?.[0]?.content?.parts?.[0]?.text || ""
         }
 
         console.log("Invocando a Gemini 2.5 Flash...")
