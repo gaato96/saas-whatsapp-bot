@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { DashboardNav } from '@/components/dashboard-nav'
 import { ArrowLeft, LogOut } from 'lucide-react'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -13,27 +14,33 @@ export default async function DashboardLayout({ children, params }: DashboardLay
   const { businessId } = await params
   let businessName = 'Panel de Control'
   let rubro = 'Personalizado'
+  let enabledModules: string[] = ['chat', 'clients', 'ai_config', 'business_config', 'whatsapp_config', 'crm', 'catalog', 'agenda']
 
   try {
     const supabase = await createClient()
     const { data } = await supabase
       .from('businesses')
-      .select('name, rubro')
+      .select('name, rubro, enabled_modules')
       .eq('id', businessId)
       .single()
 
     if (data) {
       businessName = data.name
       rubro = data.rubro
+      if (data.enabled_modules) {
+        enabledModules = data.enabled_modules
+      }
     }
   } catch (err) {
     console.log("No se pudo obtener información del negocio, usando demo defaults.")
     if (businessId === 'demo-business-id') {
       businessName = 'Pizzería Bella (Demo)'
       rubro = 'Comida'
+      enabledModules = ['chat', 'clients', 'ai_config', 'business_config', 'whatsapp_config', 'crm', 'catalog']
     } else if (businessId === 'demo-zapas-id' || businessId === 'zapas-premium') {
       businessName = 'Zapas Premium (Demo)'
       rubro = 'E-commerce'
+      enabledModules = ['chat', 'clients', 'ai_config', 'business_config', 'whatsapp_config', 'crm', 'catalog']
     }
   }
 
@@ -59,7 +66,7 @@ export default async function DashboardLayout({ children, params }: DashboardLay
           </div>
 
           {/* Menú de Navegación del Dashboard */}
-          <DashboardNav businessId={businessId} />
+          <DashboardNav businessId={businessId} rubro={rubro} enabledModules={enabledModules} />
         </div>
 
         {/* Footer Sidebar */}
@@ -91,6 +98,7 @@ export default async function DashboardLayout({ children, params }: DashboardLay
             ERP / CRM en Tiempo Real
           </div>
           <div className="flex items-center gap-4">
+            <ThemeToggle />
             <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
               <span className="text-[10px] text-emerald-400 font-bold font-mono">WhatsApp Webhook Activo</span>

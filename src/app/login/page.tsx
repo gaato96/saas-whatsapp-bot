@@ -95,31 +95,7 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* Separador */}
-        <div className="relative flex items-center justify-center my-4">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-zinc-900" />
-          </div>
-          <span className="relative bg-zinc-950 px-3 text-[10px] uppercase font-semibold tracking-wider text-zinc-600">
-            Acceso Rápido Desarrollador
-          </span>
-        </div>
 
-        {/* Demo Links */}
-        <div className="grid grid-cols-2 gap-3 text-center">
-          <button
-            onClick={() => router.push('/admin')}
-            className="rounded-lg border border-zinc-800 bg-zinc-900/20 py-2 px-3 text-xs font-semibold hover:bg-zinc-800 transition-colors"
-          >
-            Panel Superadmin
-          </button>
-          <button
-            onClick={() => router.push('/dashboard/demo-business-id')}
-            className="rounded-lg border border-zinc-800 bg-zinc-900/20 py-2 px-3 text-xs font-semibold hover:bg-zinc-800 transition-colors"
-          >
-            Panel Cliente (Demo)
-          </button>
-        </div>
       </div>
     </div>
   )

@@ -14,7 +14,7 @@ export default async function ChatPage({ params }: ChatPageProps) {
     const supabase = await createClient()
     const { data } = await supabase
       .from('chat_sessions')
-      .select('id, customer_phone, last_interaction, status')
+      .select('id, customer_phone, last_interaction, status, customer_name, notes, is_archived')
       .eq('business_id', businessId)
       .order('last_interaction', { ascending: false })
 

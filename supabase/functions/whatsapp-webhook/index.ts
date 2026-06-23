@@ -71,6 +71,21 @@ FLUJO ESPECÍFICO DE TURNO:
 4. Al confirmar los datos, debes cerrar la reserva. Los turnos también se registran como un ítem de servicio. Genera la etiqueta final de confirmación:
    [ORDER_JSON: {"items": [{"product_id": "UUID_DEL_SERVICIO", "name": "Servicio con Profesional y Horario", "qty": 1, "price": Precio}], "payment_method": "cash", "total": Total}]
 `;
+  } else if (rubro === "Agencia") {
+    rubroPrompt = `
+- Tu rubro es Agencia de Servicios (por ejemplo: marketing, desarrollo, automatizaciones, consultoría).
+- Especialidades/Servicios de la Agencia: ${rubroConfig?.agency_specialties || "No especificadas"}.
+- Tipo de Agencia: ${rubroConfig?.agency_type || "Servicios profesionales"}.
+- Tipo de reunión: ${rubroConfig?.meeting_type || "virtual"}.
+- Link de reserva (Calendly/Google Calendar/etc.): ${rubroConfig?.booking_link || "No configurado"}.
+
+FLUJO ESPECÍFICO DE RESERVAS/CONTACTO:
+1. Saluda cordialmente y responde dudas sobre los servicios y especialidades de la agencia.
+2. Indaga brevemente y de forma conversacional sobre las necesidades del cliente.
+3. Invita al cliente a agendar una llamada/videollamada de asesoramiento/consulta utilizando el link de reserva provisto.
+4. IMPORTANTE: Comparte el siguiente enlace de reserva de forma clara y atractiva para que el cliente pueda programar su reunión: ${rubroConfig?.booking_link || "Link no disponible"}.
+5. Si no hay catálogo de servicios registrados, tu prioridad absoluta es guiar al cliente para que agende mediante el Link de Reserva.
+`;
   } else {
     // Rubro general, e-commerce, o personalizado
     rubroPrompt = `
@@ -105,6 +120,65 @@ ${rubroPrompt}
 
 IMPORTANTE: Reemplaza "UUID" en la etiqueta de orden por el ID de catálogo exacto de 36 caracteres provisto en el catálogo. La etiqueta [ORDER_JSON: ...] debe imprimirse en una sola línea al final y ser un JSON válido.
 `;
+}
+
+// =========================================================================
+// 2. TRANSCRIPCIÓN DE AUDIO CON GEMINI
+// Descarga el archivo de voz enviado por WhatsApp y lo transcribe con IA.
+// =========================================================================
+async function transcribeAudio(mediaId: string, waToken: string): Promise<string> {
+  // Paso 1: Obtener la URL de descarga del archivo de audio en los servidores de Meta
+  const mediaInfoRes = await fetch(`https://graph.facebook.com/v22.0/${mediaId}`, {
+    headers: { Authorization: `Bearer ${waToken}` }
+  })
+  if (!mediaInfoRes.ok) {
+    const err = await mediaInfoRes.text()
+    throw new Error(`No se pudo obtener la info del audio de Meta: ${err}`)
+  }
+  const mediaInfo = await mediaInfoRes.json()
+  const mediaUrl: string = mediaInfo.url
+  const mimeType: string = mediaInfo.mime_type || "audio/ogg"
+
+  // Paso 2: Descargar el binario del archivo de audio
+  const audioDownloadRes = await fetch(mediaUrl, {
+    headers: { Authorization: `Bearer ${waToken}` }
+  })
+  if (!audioDownloadRes.ok) {
+    throw new Error(`No se pudo descargar el archivo de audio: ${await audioDownloadRes.text()}`)
+  }
+  const audioBuffer = await audioDownloadRes.arrayBuffer()
+  const audioBase64 = btoa(String.fromCharCode(...new Uint8Array(audioBuffer)))
+
+  // Paso 3: Enviar el audio a Gemini para transcripción
+  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
+  const transcriptionPayload = {
+    contents: [{
+      role: "user",
+      parts: [
+        {
+          inline_data: {
+            mime_type: mimeType,
+            data: audioBase64
+          }
+        },
+        {
+          text: "Transcribe este mensaje de voz en español de forma exacta. Devuelve únicamente el texto transcripto sin comentarios adicionales."
+        }
+      ]
+    }]
+  }
+
+  const geminiRes = await fetch(geminiUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(transcriptionPayload)
+  })
+  if (!geminiRes.ok) {
+    throw new Error(`Error de Gemini al transcribir audio: ${await geminiRes.text()}`)
+  }
+  const geminiData = await geminiRes.json()
+  const transcript = geminiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ""
+  return transcript
 }
 
 serve(async (req) => {
@@ -198,15 +272,32 @@ serve(async (req) => {
       }
 
       const customerPhone = messageObj.from
-      const messageText = messageObj.text?.body?.trim()
       const phoneId = value.metadata?.phone_number_id // ID del teléfono Meta receptor
+      const messageType = messageObj.type // "text", "audio", "image", etc.
 
-      // Ignorar mensajes vacíos o que no sean texto (evitamos procesar adjuntos en esta fase)
-      if (!messageText) {
-        return new Response("Mensaje sin texto ignorado", { status: 200 })
+      let messageText = ""
+      let isAudioTranscription = false
+
+      if (messageType === "text") {
+        messageText = messageObj.text?.body?.trim() || ""
+      } else if (messageType === "audio") {
+        // Procesar mensaje de voz: descargar y transcribir con Gemini
+        const mediaId = messageObj.audio?.id
+        console.log(`Mensaje de audio recibido de ${customerPhone}. Media ID: ${mediaId}`)
+        // Marcamos como pendiente; el token de WhatsApp se obtiene después de buscar el negocio
+        messageText = `__AUDIO_PENDING__:${mediaId}`
+        isAudioTranscription = true
+      } else {
+        // Ignorar otros tipos (imagen, video, documento, sticker, etc.)
+        console.log(`Tipo de mensaje no soportado: "${messageType}". Ignorando.`)
+        return new Response("Tipo de mensaje no soportado", { status: 200 })
       }
 
-      console.log(`Mensaje entrante de: ${customerPhone} al número receptor Meta: ${phoneId}. Mensaje: "${messageText}"`)
+      if (!messageText) {
+        return new Response("Mensaje sin contenido ignorado", { status: 200 })
+      }
+
+      console.log(`Mensaje entrante de: ${customerPhone} al número receptor Meta: ${phoneId}. Tipo: ${messageType}`)
 
       // 2. Buscar negocio en base de datos usando el Phone Number ID de Meta
       let business = null
@@ -292,11 +383,49 @@ serve(async (req) => {
         return new Response("Intervención humana activa", { status: 200 })
       }
 
-      // 5. Guardar el mensaje entrante del cliente en el historial
+      // 5a. Si el mensaje era un audio, transcribirlo ahora que tenemos el token
+      if (isAudioTranscription && messageText.startsWith("__AUDIO_PENDING__:")) {
+        const mediaId = messageText.replace("__AUDIO_PENDING__:", "")
+        const waToken = business.whatsapp_config?.access_token
+        if (!waToken) {
+          console.error("No hay access_token configurado para transcribir audio.")
+          return new Response("Token de WhatsApp no configurado", { status: 200 })
+        }
+        try {
+          console.log(`Transcribiendo audio con Gemini... Media ID: ${mediaId}`)
+          const transcript = await transcribeAudio(mediaId, waToken)
+          if (!transcript) {
+            console.warn("Transcripción vacía, ignorando mensaje de audio.")
+            return new Response("Transcripción vacía", { status: 200 })
+          }
+          messageText = transcript
+          console.log(`Audio transcripto con éxito: "${messageText}"`)
+        } catch (audioErr) {
+          console.error("Error transcribiendo audio:", audioErr)
+          // Notificar al cliente que no se pudo procesar el audio
+          const waToken2 = business.whatsapp_config?.access_token
+          if (waToken2 && phoneId) {
+            await fetch(`https://graph.facebook.com/v22.0/${phoneId}/messages`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${waToken2}` },
+              body: JSON.stringify({
+                messaging_product: "whatsapp",
+                to: customerPhone,
+                type: "text",
+                text: { body: "Lo siento, no pude procesar tu mensaje de voz en este momento. Por favor, escribe tu consulta por texto. 🙏" }
+              })
+            })
+          }
+          return new Response("Error de transcripción", { status: 200 })
+        }
+      }
+
+      // 5b. Guardar el mensaje entrante del cliente en el historial
+      const storedText = isAudioTranscription ? `🎙️ [Mensaje de voz transcripto]: ${messageText}` : messageText
       await supabaseAdmin.from("chat_history").insert({
         session_id: session.id,
         sender: "customer",
-        message_text: messageText,
+        message_text: storedText,
         timestamp: new Date().toISOString()
       })
 
@@ -449,7 +578,7 @@ serve(async (req) => {
       // ==========================================
       const waToken = business.whatsapp_config?.access_token
       if (waToken && phoneId) {
-        const waSendUrl = `https://graph.facebook.com/v18.0/${phoneId}/messages`
+        const waSendUrl = `https://graph.facebook.com/v22.0/${phoneId}/messages`
         
         const waPayload = {
           messaging_product: "whatsapp",

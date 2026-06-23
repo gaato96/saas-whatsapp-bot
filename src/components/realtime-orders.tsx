@@ -40,36 +40,39 @@ export function RealtimeOrders({ businessId, initialOrders }: RealtimeOrdersProp
   // Demo fallback check
   useEffect(() => {
     if (businessId === 'demo-business-id' && initialOrders.length === 0) {
-      setDbConnected(false)
-      setOrders([
-        {
-          id: 'order-1',
-          business_id: 'demo-business-id',
-          customer_phone: '5491138293849',
-          status: 'pending_payment',
-          payment_method: 'transfer',
-          total: 2450.0,
-          items: [{ name: 'Hamburguesa Triple Cheese', qty: 1, price: 2100 }, { name: 'Papas Fritas Medianas', qty: 1, price: 350 }],
-          created_at: new Date(Date.now() - 5 * 60000).toISOString(),
-        },
-        {
-          id: 'order-2',
-          business_id: 'demo-business-id',
-          customer_phone: '5491129384729',
-          status: 'confirmed',
-          payment_method: 'cash',
-          total: 1500.0,
-          items: [{ name: 'Pizza Muzzarella Individual', qty: 1, price: 1500 }],
-          created_at: new Date(Date.now() - 25 * 60000).toISOString(),
-        },
-      ])
+      const timer = setTimeout(() => {
+        setDbConnected(false)
+        setOrders([
+          {
+            id: 'order-1',
+            business_id: 'demo-business-id',
+            customer_phone: '5491138293849',
+            status: 'pending_payment',
+            payment_method: 'transfer',
+            total: 2450.0,
+            items: [{ name: 'Hamburguesa Triple Cheese', qty: 1, price: 2100 }, { name: 'Papas Fritas Medianas', qty: 1, price: 350 }],
+            created_at: new Date(Date.now() - 5 * 60000).toISOString(),
+          },
+          {
+            id: 'order-2',
+            business_id: 'demo-business-id',
+            customer_phone: '5491129384729',
+            status: 'confirmed',
+            payment_method: 'cash',
+            total: 1500.0,
+            items: [{ name: 'Pizza Muzzarella Individual', qty: 1, price: 1500 }],
+            created_at: new Date(Date.now() - 25 * 60000).toISOString(),
+          },
+        ])
+      }, 0)
+      return () => clearTimeout(timer)
     }
   }, [businessId, initialOrders])
 
   // Desencadenar sonido de notificación
   const playNotificationSound = () => {
     try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
+      const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
       
       // Beep 1
       const osc1 = audioCtx.createOscillator()

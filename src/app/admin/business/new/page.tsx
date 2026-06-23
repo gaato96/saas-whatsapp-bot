@@ -24,11 +24,14 @@ export default function NewBusinessPage() {
         .insert({
           name: data.name,
           rubro: data.rubro,
+          subscription_price: Number(data.subscription_price) || 0,
+          expiration_date: data.expiration_date ? new Date(data.expiration_date).toISOString() : null,
+          enabled_modules: data.enabled_modules || [],
           whatsapp_config: {
-            phone_number_id: data.whatsapp_phone_number_id || null,
-            verify_token: data.whatsapp_verify_token || null,
-            access_token: data.whatsapp_access_token || null,
-            waba_id: data.whatsapp_waba_id || null,
+            phone_number_id: null,
+            verify_token: null,
+            access_token: null,
+            waba_id: null,
           },
         })
         .select()
@@ -36,12 +39,12 @@ export default function NewBusinessPage() {
 
       if (bizError) throw bizError
 
-      // 2. Insertar la metadata específica del rubro en 'business_rubro_data'
+      // 2. Insertar la metadata específica del rubro en 'business_rubro_data' (inicialmente vacía, el cliente la configura)
       const { error: rubroError } = await supabase
         .from('business_rubro_data')
         .insert({
           business_id: business.id,
-          custom_metadata: data.custom_metadata || {},
+          custom_metadata: {},
         })
 
       if (rubroError) throw rubroError

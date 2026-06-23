@@ -2,12 +2,15 @@
 
 import React, { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { Archive, Trash2, Sparkles, X, ArchiveRestore, RefreshCw } from 'lucide-react'
 
 interface Session {
   id: string
   customer_phone: string
   last_interaction: string
   status: 'bot_handling' | 'human_required'
+  customer_name?: string
+  is_archived?: boolean
 }
 
 interface Message {
@@ -34,90 +37,34 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
   const [dbConnected, setDbConnected] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  // Nuevos estados para archivar, borrar y resumen IA
+  const [showArchived, setShowArchived] = useState(false)
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false)
+  const [chatSummary, setChatSummary] = useState('')
+  const [showSummaryPanel, setShowSummaryPanel] = useState(false)
+
   // Demo Fallback
   useEffect(() => {
     if (businessId === 'demo-business-id' && initialSessions.length === 0) {
-      setDbConnected(false)
-      const demoSessions: Session[] = [
-        {
-          id: 'session-demo-1',
-          customer_phone: '5491138293849',
-          last_interaction: new Date().toISOString(),
-          status: 'human_required',
-        },
-        {
-          id: 'session-demo-2',
-          customer_phone: '5491129384729',
-          last_interaction: new Date(Date.now() - 600000).toISOString(),
-          status: 'bot_handling',
-        },
-      ]
-      setSessions(demoSessions)
-      setSelectedSessionId(demoSessions[0].id)
-      
-      setMessages([
-        {
-          id: 'm1',
-          session_id: 'session-demo-1',
-          sender: 'customer',
-          message_text: 'Hola, me gustaría ordenar una hamburguesa con papas.',
-          timestamp: new Date(Date.now() - 300000).toISOString(),
-        },
-        {
-          id: 'm2',
-          session_id: 'session-demo-1',
-          sender: 'bot',
-          message_text: '¡Hola! Claro, con gusto. Tenemos la Hamburguesa Triple Cheese ($2100) y Papas Fritas ($350). ¿Deseas agregar algo más?',
-          timestamp: new Date(Date.now() - 250000).toISOString(),
-        },
-        {
-          id: 'm3',
-          session_id: 'session-demo-1',
-          sender: 'customer',
-          message_text: 'Sí, las papas medianas y una coca. ¿Tienen a domicilio?',
-          timestamp: new Date(Date.now() - 200000).toISOString(),
-        },
-        {
-          id: 'm4',
-          session_id: 'session-demo-1',
-          sender: 'bot',
-          message_text: 'Sí, hacemos envíos. El costo es de $150. ¿Me podrías indicar tu dirección exacta por favor?',
-          timestamp: new Date(Date.now() - 150000).toISOString(),
-        },
-        {
-          id: 'm5',
-          session_id: 'session-demo-1',
-          sender: 'customer',
-          message_text: 'Quiero hablar con un agente para consultarle sobre un ingrediente.',
-          timestamp: new Date(Date.now() - 100000).toISOString(),
-        },
-        {
-          id: 'm6',
-          session_id: 'session-demo-1',
-          sender: 'bot',
-          message_text: 'Entendido. Un momento, por favor. Transferiré este chat a un asesor humano.',
-          timestamp: new Date(Date.now() - 95000).toISOString(),
-        }
-      ])
-    }
-  }, [businessId, initialSessions])
-
-  // Desplazar automáticamente el chat hacia abajo
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
-
-  useEffect(() => {
-    scrollToBottom()
-  }, [messages])
-
-  // Cargar hilos históricos
-  useEffect(() => {
-    if (!selectedSessionId) return
-
-    if (!dbConnected || businessId === 'demo-business-id') {
-      // Cargar mensajes mock correspondientes según el talle/producto (Hamburguesa vs Zapatillas)
-      if (selectedSessionId === 'session-demo-1') {
+      const timer = setTimeout(() => {
+        setDbConnected(false)
+        const demoSessions: Session[] = [
+          {
+            id: 'session-demo-1',
+            customer_phone: '5491138293849',
+            last_interaction: new Date().toISOString(),
+            status: 'human_required',
+          },
+          {
+            id: 'session-demo-2',
+            customer_phone: '5491129384729',
+            last_interaction: new Date(Date.now() - 600000).toISOString(),
+            status: 'bot_handling',
+          },
+        ]
+        setSessions(demoSessions)
+        setSelectedSessionId(demoSessions[0].id)
+        
         setMessages([
           {
             id: 'm1',
@@ -162,53 +109,120 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
             timestamp: new Date(Date.now() - 95000).toISOString(),
           }
         ])
-      } else if (selectedSessionId === 'session-demo-2') {
-        setMessages([
-          {
-            id: 'z1',
-            session_id: 'session-demo-2',
-            sender: 'customer',
-            message_text: 'Hola, buenas tardes. ¿Tienen zapatillas Nike Air Max talle 41?',
-            timestamp: new Date(Date.now() - 600000).toISOString(),
-          },
-          {
-            id: 'z2',
-            session_id: 'session-demo-2',
-            sender: 'bot',
-            message_text: '¡Hola! Sí, disponemos de stock en **Nike Air Max** color Negro y Blanco en talle 41. Su valor es de **$85.000**. ¿Te gustaría reservar unas?',
-            timestamp: new Date(Date.now() - 550000).toISOString(),
-          },
-          {
-            id: 'z3',
-            session_id: 'session-demo-2',
-            sender: 'customer',
-            message_text: 'Buenísimo, me interesan las negras. ¿Hacen envíos a Belgrano?',
-            timestamp: new Date(Date.now() - 500000).toISOString(),
-          },
-          {
-            id: 'z4',
-            session_id: 'session-demo-2',
-            sender: 'bot',
-            message_text: '¡Excelente! Sí, hacemos envíos a Belgrano. El costo de envío a tu zona es de **$1.200**, o bien envío **gratis** si agregas unas medias o producto extra de nuestro catálogo. ¿Confirmamos la reserva de las zapatillas?',
-            timestamp: new Date(Date.now() - 450000).toISOString(),
-          },
-          {
-            id: 'z5',
-            session_id: 'session-demo-2',
-            sender: 'customer',
-            message_text: 'De una, confirmemos las zapatillas solas. Dirección: Av. Cabildo 1500, 4B. Pago por transferencia.',
-            timestamp: new Date(Date.now() - 400000).toISOString(),
-          },
-          {
-            id: 'z6',
-            session_id: 'session-demo-2',
-            sender: 'bot',
-            message_text: '¡Perfecto! Agendado. El total de tu pedido es **$86.200** (Zapatillas + Envío). Para abonar, realiza la transferencia a:\n\n* **Alias**: TIENDA.ZAPAS.GO\n* **CBU**: 0170093847293847293847\n* **Titular**: Juan Manuel Zapatillas S.A.\n\nPor favor, envíame el comprobante por este chat para que el dueño valide el pago y despache tu pedido.',
-            timestamp: new Date(Date.now() - 350000).toISOString(),
-          }
-        ])
-      }
-      return
+      }, 0)
+      return () => clearTimeout(timer)
+    }
+  }, [businessId, initialSessions])
+
+  // Desplazar automáticamente el chat hacia abajo
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages])
+
+  // Cargar hilos históricos
+  useEffect(() => {
+    if (!selectedSessionId) return
+
+    if (!dbConnected || businessId === 'demo-business-id') {
+      // Cargar mensajes mock correspondientes según el talle/producto (Hamburguesa vs Zapatillas)
+      const timer = setTimeout(() => {
+        if (selectedSessionId === 'session-demo-1') {
+          setMessages([
+            {
+              id: 'm1',
+              session_id: 'session-demo-1',
+              sender: 'customer',
+              message_text: 'Hola, me gustaría ordenar una hamburguesa con papas.',
+              timestamp: new Date(Date.now() - 300000).toISOString(),
+            },
+            {
+              id: 'm2',
+              session_id: 'session-demo-1',
+              sender: 'bot',
+              message_text: '¡Hola! Claro, con gusto. Tenemos la Hamburguesa Triple Cheese ($2100) y Papas Fritas ($350). ¿Deseas agregar algo más?',
+              timestamp: new Date(Date.now() - 250000).toISOString(),
+            },
+            {
+              id: 'm3',
+              session_id: 'session-demo-1',
+              sender: 'customer',
+              message_text: 'Sí, las papas medianas y una coca. ¿Tienen a domicilio?',
+              timestamp: new Date(Date.now() - 200000).toISOString(),
+            },
+            {
+              id: 'm4',
+              session_id: 'session-demo-1',
+              sender: 'bot',
+              message_text: 'Sí, hacemos envíos. El costo es de $150. ¿Me podrías indicar tu dirección exacta por favor?',
+              timestamp: new Date(Date.now() - 150000).toISOString(),
+            },
+            {
+              id: 'm5',
+              session_id: 'session-demo-1',
+              sender: 'customer',
+              message_text: 'Quiero hablar con un agente para consultarle sobre un ingrediente.',
+              timestamp: new Date(Date.now() - 100000).toISOString(),
+            },
+            {
+              id: 'm6',
+              session_id: 'session-demo-1',
+              sender: 'bot',
+              message_text: 'Entendido. Un momento, por favor. Transferiré este chat a un asesor humano.',
+              timestamp: new Date(Date.now() - 95000).toISOString(),
+            }
+          ])
+        } else if (selectedSessionId === 'session-demo-2') {
+          setMessages([
+            {
+              id: 'z1',
+              session_id: 'session-demo-2',
+              sender: 'customer',
+              message_text: 'Hola, buenas tardes. ¿Tienen zapatillas Nike Air Max talle 41?',
+              timestamp: new Date(Date.now() - 600000).toISOString(),
+            },
+            {
+              id: 'z2',
+              session_id: 'session-demo-2',
+              sender: 'bot',
+              message_text: '¡Hola! Sí, disponemos de stock en **Nike Air Max** color Negro y Blanco en talle 41. Su valor es de **$85.000**. ¿Te gustaría reservar unas?',
+              timestamp: new Date(Date.now() - 550000).toISOString(),
+            },
+            {
+              id: 'z3',
+              session_id: 'session-demo-2',
+              sender: 'customer',
+              message_text: 'Buenísimo, me interesan las negras. ¿Hacen envíos a Belgrano?',
+              timestamp: new Date(Date.now() - 500000).toISOString(),
+            },
+            {
+              id: 'z4',
+              session_id: 'session-demo-2',
+              sender: 'bot',
+              message_text: '¡Excelente! Sí, hacemos envíos a Belgrano. El costo de envío a tu zona es de **$1.200**, o bien envío **gratis** si agregas unas medias o producto extra de nuestro catálogo. ¿Confirmamos la reserva de las zapatillas?',
+              timestamp: new Date(Date.now() - 450000).toISOString(),
+            },
+            {
+              id: 'z5',
+              session_id: 'session-demo-2',
+              sender: 'customer',
+              message_text: 'De una, confirmemos las zapatillas solas. Dirección: Av. Cabildo 1500, 4B. Pago por transferencia.',
+              timestamp: new Date(Date.now() - 400000).toISOString(),
+            },
+            {
+              id: 'z6',
+              session_id: 'session-demo-2',
+              sender: 'bot',
+              message_text: '¡Perfecto! Agendado. El total de tu pedido es **$86.200** (Zapatillas + Envío). Para abonar, realiza la transferencia a:\n\n* **Alias**: TIENDA.ZAPAS.GO\n* **CBU**: 0170093847293847293847\n* **Titular**: Juan Manuel Zapatillas S.A.\n\nPor favor, envíame el comprobante por este chat para que el dueño valide el pago y despache tu pedido.',
+              timestamp: new Date(Date.now() - 350000).toISOString(),
+            }
+          ])
+        }
+      }, 0)
+      return () => clearTimeout(timer)
     }
 
     const loadMessages = async () => {
@@ -287,7 +301,6 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
         prev.map((s) => (s.id === session.id ? { ...s, status: nextStatus } : s))
       )
       
-      // Agregar un mensaje informando del cambio de estado en la interfaz
       const sysMsg: Message = {
         id: Math.random().toString(),
         session_id: session.id,
@@ -311,6 +324,110 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
     }
   }
 
+  // Archivar o Desarchivar chat
+  const handleToggleArchive = async (session: Session) => {
+    const nextArchived = !session.is_archived
+
+    if (!dbConnected || businessId === 'demo-business-id') {
+      setSessions((prev) =>
+        prev.map((s) => (s.id === session.id ? { ...s, is_archived: nextArchived } : s))
+      )
+      
+      if (nextArchived && selectedSessionId === session.id) {
+        const remaining = sessions.filter((s) => s.id !== session.id && !s.is_archived)
+        setSelectedSessionId(remaining[0]?.id || null)
+      }
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('chat_sessions')
+        .update({ is_archived: nextArchived })
+        .eq('id', session.id)
+
+      if (error) throw error
+
+      setSessions((prev) =>
+        prev.map((s) => (s.id === session.id ? { ...s, is_archived: nextArchived } : s))
+      )
+
+      if (nextArchived && selectedSessionId === session.id) {
+        const remaining = sessions.filter((s) => s.id !== session.id && (showArchived ? s.is_archived : !s.is_archived))
+        setSelectedSessionId(remaining[0]?.id || null)
+      }
+    } catch (err) {
+      console.error('Error al archivar chat:', err)
+      alert('Error al archivar la sesión de chat.')
+    }
+  }
+
+  // Eliminar conversación completa
+  const handleDeleteChat = async (sessionId: string) => {
+    if (!confirm('¿Estás seguro de que deseas eliminar esta conversación por completo? Esto borrará permanentemente todo el historial de mensajes.')) {
+      return
+    }
+
+    if (!dbConnected || businessId === 'demo-business-id') {
+      setSessions((prev) => prev.filter((s) => s.id !== sessionId))
+      setSelectedSessionId(null)
+      setChatSummary('')
+      setShowSummaryPanel(false)
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('chat_sessions')
+        .delete()
+        .eq('id', sessionId)
+
+      if (error) throw error
+
+      setSessions((prev) => prev.filter((s) => s.id !== sessionId))
+      setSelectedSessionId(null)
+      setChatSummary('')
+      setShowSummaryPanel(false)
+    } catch (err) {
+      console.error('Error al eliminar chat:', err)
+      alert('Error al eliminar el chat de la base de datos.')
+    }
+  }
+
+  // Generar resumen con Gemini
+  const handleGenerateSummary = async (sessionId: string) => {
+    setIsGeneratingSummary(true)
+    setChatSummary('')
+    setShowSummaryPanel(true)
+
+    try {
+      if (!dbConnected || businessId === 'demo-business-id') {
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+        setChatSummary(`- **Cliente:** Interesado en ordenar una hamburguesa con papas y refresco. Pregunta por costo de envío.
+- **Acordado:** El bot le pasó las opciones (Triple Cheese, Papas) y detalló el costo de envío de $150. El cliente pidió hablar con un humano.
+- **Pendiente:** El cliente solicitó hablar con un asesor para consultar sobre un ingrediente de la hamburguesa. Requiere atención manual.`);
+        setIsGeneratingSummary(false)
+        return
+      }
+
+      const res = await fetch('/api/chat/summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId })
+      })
+
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setChatSummary(data.summary)
+    } catch (err) {
+      console.error('Error al generar resumen:', err)
+      const msg = err instanceof Error ? err.message : 'Error de conexión'
+      setChatSummary(`❌ Error al generar resumen: ${msg}`)
+    } finally {
+      setIsGeneratingSummary(false)
+    }
+  }
+
   // Enviar mensaje como Agente Humano
   const handleSendAgentMessage = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -329,7 +446,6 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
       }
       setMessages((prev) => [...prev, mockMsg])
       
-      // Simular respuesta del cliente tras 2 segundos para testing
       setTimeout(() => {
         const mockCustomerResponse: Message = {
           id: Math.random().toString(),
@@ -343,8 +459,6 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
       return
     }
 
-    // Insertar el mensaje del agente en Supabase.
-    // El trigger de base de datos o la lógica de negocio notificará a WhatsApp, y realtime actualizará la pantalla.
     const { error } = await supabase.from('chat_history').insert({
       session_id: selectedSessionId,
       sender: 'agent',
@@ -358,23 +472,37 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
   }
 
   const currentSession = sessions.find((s) => s.id === selectedSessionId)
+  const filteredSessions = sessions.filter(
+    (s) => (showArchived ? s.is_archived === true : !s.is_archived)
+  )
 
   return (
-    <div className="border border-zinc-900 bg-zinc-950/60 rounded-2xl overflow-hidden grid grid-cols-1 md:grid-cols-3 h-[650px] shadow-sm">
+    <div className="border border-zinc-900 bg-zinc-950/60 rounded-2xl overflow-hidden grid grid-cols-1 md:grid-cols-3 h-[650px] shadow-sm font-sans">
       
       {/* 1. SECCIÓN IZQUIERDA: LISTA DE CONVERSACIONES */}
       <div className="border-r border-zinc-900 flex flex-col h-full bg-zinc-950">
-        <div className="p-4 border-b border-zinc-900 flex justify-between items-center bg-zinc-950/40">
-          <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">Chats Recientes</span>
-          <span className="text-[10px] text-zinc-600 font-bold">Total: {sessions.length}</span>
+        <div className="p-2 border-b border-zinc-900 flex bg-zinc-950/45 gap-1">
+          <button
+            onClick={() => { setShowArchived(false); setSelectedSessionId(sessions.find(s => !s.is_archived)?.id || null); }}
+            className={`flex-1 py-2 text-center text-[10px] uppercase font-bold rounded-lg transition-all ${!showArchived ? 'bg-zinc-900 text-white border border-zinc-800' : 'text-zinc-500 hover:text-zinc-350'}`}
+          >
+            Activos
+          </button>
+          <button
+            onClick={() => { setShowArchived(true); setSelectedSessionId(sessions.find(s => s.is_archived)?.id || null); }}
+            className={`flex-1 py-2 text-center text-[10px] uppercase font-bold rounded-lg transition-all ${showArchived ? 'bg-zinc-900 text-white border border-zinc-800' : 'text-zinc-500 hover:text-zinc-350'}`}
+          >
+            Archivados
+          </button>
         </div>
         <div className="flex-1 overflow-y-auto divide-y divide-zinc-900/40">
-          {sessions.length === 0 ? (
-            <div className="p-8 text-center text-xs text-zinc-600 font-medium">Sin chats de clientes activos</div>
+          {filteredSessions.length === 0 ? (
+            <div className="p-8 text-center text-xs text-zinc-600 font-medium">Sin chats en esta sección</div>
           ) : (
-            sessions.map((s) => {
+            filteredSessions.map((s) => {
               const isHuman = s.status === 'human_required'
               const isSelected = s.id === selectedSessionId
+              const displayName = s.customer_name || `Cliente (${s.customer_phone.substring(0, 7)}...)`
               
               return (
                 <button
@@ -387,8 +515,8 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
                   }`}
                 >
                   <div className="flex items-center justify-between w-full">
-                    <span className="font-bold text-xs text-zinc-200 font-mono">
-                      📞 {s.customer_phone}
+                    <span className="font-bold text-xs text-zinc-200 truncate max-w-[140px]" title={displayName}>
+                      {displayName}
                     </span>
                     <span className="text-[9px] text-zinc-500">
                       {new Date(s.last_interaction).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -421,7 +549,9 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
             {/* Header del Chat */}
             <div className="p-4 border-b border-zinc-900 bg-zinc-950/60 flex items-center justify-between">
               <div>
-                <span className="font-bold text-xs text-white">Cliente: {currentSession.customer_phone}</span>
+                <span className="font-bold text-xs text-white">
+                  Cliente: {currentSession.customer_name ? `${currentSession.customer_name} (${currentSession.customer_phone})` : currentSession.customer_phone}
+                </span>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className={`h-1.5 w-1.5 rounded-full ${currentSession.status === 'human_required' ? 'bg-red-400 animate-pulse' : 'bg-purple-400'}`} />
                   <span className="text-[10px] text-zinc-500">
@@ -430,86 +560,158 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
                 </div>
               </div>
               
-              <button
-                onClick={() => handleToggleTakeover(currentSession)}
-                className={`rounded-lg px-3.5 py-1.5 text-xs font-bold border transition-all ${
-                  currentSession.status === 'human_required'
-                    ? 'bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20 shadow-md shadow-red-500/5'
-                    : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
-                }`}
-              >
-                {currentSession.status === 'human_required' ? '🤖 Habilitar Bot' : '👨‍💼 Tomar Control'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleGenerateSummary(currentSession.id)}
+                  title="Generar Resumen de Chat con IA"
+                  className="rounded-lg border border-purple-500/20 bg-purple-500/5 hover:bg-purple-500/10 p-2 text-xs font-bold text-purple-450 transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>Resumen IA</span>
+                </button>
+
+                <button
+                  onClick={() => handleToggleArchive(currentSession)}
+                  title={currentSession.is_archived ? "Desarchivar Conversación" : "Archivar Conversación"}
+                  className="rounded-lg border border-zinc-800 bg-zinc-900 p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all cursor-pointer"
+                >
+                  {currentSession.is_archived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
+                </button>
+
+                <button
+                  onClick={() => handleDeleteChat(currentSession.id)}
+                  title="Eliminar Conversación"
+                  className="rounded-lg border border-red-950 bg-red-950/20 p-2 text-red-400 hover:text-red-350 hover:bg-red-950/40 transition-all cursor-pointer"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+
+                <button
+                  onClick={() => handleToggleTakeover(currentSession)}
+                  className={`rounded-lg px-3.5 py-1.5 text-xs font-bold border transition-all cursor-pointer ${
+                    currentSession.status === 'human_required'
+                      ? 'bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20 shadow-md shadow-red-500/5'
+                      : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  {currentSession.status === 'human_required' ? '🤖 Habilitar Bot' : '👨‍💼 Tomar Control'}
+                </button>
+              </div>
             </div>
 
-            {/* Ventana de Mensajes con scroll forzado y altura máxima fija */}
-            <div className="flex-1 h-[480px] max-h-[480px] overflow-y-auto p-5 space-y-4 bg-zinc-950/5">
-              {messages.map((m) => {
-                const isCustomer = m.sender === 'customer'
-                const isBot = m.sender === 'bot'
-                const isAgent = m.sender === 'agent'
-                
-                let bubbleStyle = ''
-                let containerStyle = 'flex flex-col'
-                
-                if (isCustomer) {
-                  containerStyle += ' items-start'
-                  bubbleStyle = 'bg-zinc-900 text-zinc-100 rounded-bl-none border border-zinc-850'
-                } else if (isBot) {
-                  containerStyle += ' items-end'
-                  // Si el mensaje es una notificación de sistema interna (empieza con ⚠️ o 🤖)
-                  const isSys = m.message_text.startsWith('⚠️') || m.message_text.startsWith('🤖')
-                  bubbleStyle = isSys
-                    ? 'bg-zinc-900/30 border border-zinc-850 text-zinc-400 italic rounded-lg py-1.5 px-3 max-w-lg text-center'
-                    : 'bg-purple-950/35 border border-purple-900/30 text-purple-200 rounded-br-none'
-                } else if (isAgent) {
-                  containerStyle += ' items-end'
-                  bubbleStyle = 'bg-blue-600 text-white rounded-br-none shadow-md shadow-blue-500/5'
-                }
+            {/* Layout dividido para chat y panel de resumen */}
+            <div className="flex-1 flex overflow-hidden">
+              {/* Ventana de Mensajes */}
+              <div className="flex-1 flex flex-col h-full bg-zinc-950/5">
+                <div className="flex-1 overflow-y-auto p-5 space-y-4 max-h-[420px] min-h-[420px]">
+                  {messages.map((m) => {
+                    const isCustomer = m.sender === 'customer'
+                    const isBot = m.sender === 'bot'
+                    const isAgent = m.sender === 'agent'
+                    
+                    let bubbleStyle = ''
+                    let containerStyle = 'flex flex-col'
+                    
+                    if (isCustomer) {
+                      containerStyle += ' items-start'
+                      bubbleStyle = 'bg-zinc-900 text-zinc-100 rounded-bl-none border border-zinc-850'
+                    } else if (isBot) {
+                      containerStyle += ' items-end'
+                      const isSys = m.message_text.startsWith('⚠️') || m.message_text.startsWith('🤖')
+                      bubbleStyle = isSys
+                        ? 'bg-zinc-900/30 border border-zinc-850 text-zinc-400 italic rounded-lg py-1.5 px-3 max-w-lg text-center'
+                        : 'bg-purple-950/35 border border-purple-900/30 text-purple-200 rounded-br-none'
+                    } else if (isAgent) {
+                      containerStyle += ' items-end'
+                      bubbleStyle = 'bg-blue-600 text-white rounded-br-none shadow-md shadow-blue-500/5'
+                    }
 
-                return (
-                  <div key={m.id} className={containerStyle}>
-                    <div className="flex items-center gap-1.5 mb-1 px-1">
-                      {isCustomer && <span className="text-[9px] font-bold text-zinc-400">👤 Cliente</span>}
-                      {isBot && !m.message_text.startsWith('⚠️') && !m.message_text.startsWith('🤖') && (
-                        <span className="text-[9px] font-bold text-purple-400">🤖 Bot Gemini</span>
-                      )}
-                      {isAgent && <span className="text-[9px] font-bold text-blue-400">👨‍💼 Agente</span>}
-                      <span className="text-[9px] text-zinc-600">
-                        {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
+                    return (
+                      <div key={m.id} className={containerStyle}>
+                        <div className="flex items-center gap-1.5 mb-1 px-1">
+                          {isCustomer && <span className="text-[9px] font-bold text-zinc-400">👤 Cliente</span>}
+                          {isBot && !m.message_text.startsWith('⚠️') && !m.message_text.startsWith('🤖') && (
+                            <span className="text-[9px] font-bold text-purple-400">🤖 Bot Gemini</span>
+                          )}
+                          {isAgent && <span className="text-[9px] font-bold text-blue-400">👨‍💼 Agente</span>}
+                          <span className="text-[9px] text-zinc-600">
+                            {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <div className={`p-3 rounded-2xl text-xs max-w-md whitespace-pre-wrap leading-relaxed ${bubbleStyle}`}>
+                          {m.message_text}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {/* Input de Envío */}
+                <form onSubmit={handleSendAgentMessage} className="p-4 border-t border-zinc-900 bg-zinc-950/60 flex gap-2">
+                  <input
+                    type="text"
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    placeholder={
+                      currentSession.status === 'bot_handling' 
+                        ? "⚠️ Presiona 'Tomar Control' para responder manualmente..." 
+                        : "Escribe un mensaje de respuesta (se enviará por WhatsApp)..."
+                    }
+                    disabled={currentSession.status === 'bot_handling'}
+                    className="flex-1 rounded-xl border border-zinc-850 bg-zinc-900/40 px-3.5 py-2.5 text-xs text-white placeholder-zinc-650 focus:border-purple-500 focus:outline-none transition-all disabled:opacity-40"
+                  />
+                  <button
+                    type="submit"
+                    disabled={currentSession.status === 'bot_handling' || !newMessage.trim()}
+                    className="rounded-xl bg-purple-650 px-5 py-2.5 text-xs font-bold text-white hover:bg-purple-600 disabled:opacity-40 transition-colors shadow-lg shadow-purple-600/10 cursor-pointer"
+                  >
+                    Enviar
+                  </button>
+                </form>
+              </div>
+
+              {/* Panel de Resumen de IA en el lado derecho */}
+              {showSummaryPanel && (
+                <div className="w-80 border-l border-zinc-900 bg-zinc-950/30 flex flex-col justify-between h-[480px] max-h-[480px]">
+                  <div className="p-4 border-b border-zinc-900 flex justify-between items-center bg-zinc-950/45">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-purple-400">
+                      <Sparkles className="h-4 w-4 animate-pulse" />
+                      <span>Resumen de Conversación</span>
                     </div>
-                    <div className={`p-3 rounded-2xl text-xs max-w-md whitespace-pre-wrap leading-relaxed ${bubbleStyle}`}>
-                      {m.message_text}
-                    </div>
+                    <button 
+                      onClick={() => setShowSummaryPanel(false)}
+                      className="text-zinc-500 hover:text-white transition-colors cursor-pointer"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
-                )
-              })}
-              <div ref={messagesEndRef} />
-            </div>
+                  
+                  <div className="flex-1 p-4 overflow-y-auto text-xs text-zinc-350 space-y-4">
+                    {isGeneratingSummary ? (
+                      <div className="flex flex-col items-center justify-center py-20 space-y-3">
+                        <RefreshCw className="h-5 w-5 text-purple-500 animate-spin" />
+                        <span className="text-[10px] text-zinc-500 tracking-wider uppercase font-semibold">Generando Resumen...</span>
+                      </div>
+                    ) : (
+                      <div className="whitespace-pre-wrap leading-relaxed bg-zinc-950/40 border border-zinc-900 p-3.5 rounded-xl text-[11px]">
+                        {chatSummary}
+                      </div>
+                    )}
+                  </div>
 
-            {/* Input de Envío */}
-            <form onSubmit={handleSendAgentMessage} className="p-4 border-t border-zinc-900 bg-zinc-950/60 flex gap-2">
-              <input
-                type="text"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder={
-                  currentSession.status === 'bot_handling' 
-                    ? "⚠️ Presiona 'Tomar Control' para responder manualmente..." 
-                    : "Escribe un mensaje de respuesta (se enviará por WhatsApp)..."
-                }
-                disabled={currentSession.status === 'bot_handling'}
-                className="flex-1 rounded-xl border border-zinc-850 bg-zinc-900/40 px-3.5 py-2.5 text-xs text-white placeholder-zinc-600 focus:border-purple-500 focus:outline-none transition-all disabled:opacity-40"
-              />
-              <button
-                type="submit"
-                disabled={currentSession.status === 'bot_handling' || !newMessage.trim()}
-                className="rounded-xl bg-purple-650 px-5 py-2.5 text-xs font-bold text-white hover:bg-purple-600 disabled:opacity-40 transition-colors shadow-lg shadow-purple-600/10"
-              >
-                Enviar
-              </button>
-            </form>
+                  <div className="p-3 border-t border-zinc-900 bg-zinc-950/40">
+                    <button
+                      onClick={() => handleGenerateSummary(currentSession.id)}
+                      disabled={isGeneratingSummary}
+                      className="w-full py-2 text-center text-[10px] uppercase tracking-wider font-bold rounded-lg border border-purple-500/20 bg-purple-500/5 text-purple-450 hover:bg-purple-500/10 transition-colors disabled:opacity-50 cursor-pointer"
+                    >
+                      Actualizar Resumen
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center text-xs text-zinc-650 font-medium">

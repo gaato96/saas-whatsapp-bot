@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, use } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Users, Phone, MessageSquare, Bot, AlertCircle, ShoppingCart, UserCheck, ShieldAlert } from 'lucide-react'
+import { Users, Phone, MessageSquare, Bot, AlertCircle, ShoppingCart, ShieldAlert } from 'lucide-react'
 import Link from 'next/link'
 
 interface Customer {
@@ -13,6 +13,7 @@ interface Customer {
   totalOrders: number
   totalSpent: number
   status: 'bot_handling' | 'human_required'
+  notes?: string
 }
 
 interface ClientesPageProps {
@@ -30,6 +31,12 @@ export default function ClientesPage({ params }: ClientesPageProps) {
   // Estados de carga para acciones rápidas
   const [togglingId, setTogglingId] = useState<string | null>(null)
 
+  // Estados para modal de edición
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
+  const [newName, setNewName] = useState('')
+  const [newNotes, setNewNotes] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+
   useEffect(() => {
     const fetchCustomers = async () => {
       setIsLoading(true)
@@ -37,7 +44,7 @@ export default function ClientesPage({ params }: ClientesPageProps) {
         // Obtenemos sesiones de chat y órdenes para consolidar el listado de clientes
         const { data: chatSessions, error: chatError } = await supabase
           .from('chat_sessions')
-          .select('id, customer_phone, last_interaction, status')
+          .select('id, customer_phone, last_interaction, status, customer_name, notes')
           .eq('business_id', businessId)
 
         if (chatError) throw chatError
@@ -70,7 +77,7 @@ export default function ClientesPage({ params }: ClientesPageProps) {
           
           return {
             id: session.id,
-            name: `Cliente #${idx + 1}`, // En un SaaS con perfiles, se uniría el nombre real
+            name: session.customer_name || `Cliente #${idx + 1}`,
             phone: phone,
             lastInteraction: new Date(session.last_interaction).toLocaleString('es-ES', {
               day: 'numeric',
@@ -80,11 +87,12 @@ export default function ClientesPage({ params }: ClientesPageProps) {
             }),
             totalOrders: orderSum.count,
             totalSpent: orderSum.total,
-            status: session.status
+            status: session.status,
+            notes: session.notes || ''
           }
         })
 
-        // Ordenar por última interacción por defecto
+        // Ordenar por facturación histórica descendente
         consolidatedCustomers.sort((a, b) => b.totalSpent - a.totalSpent)
         setCustomers(consolidatedCustomers)
       } catch (err: any) {
@@ -100,7 +108,8 @@ export default function ClientesPage({ params }: ClientesPageProps) {
             lastInteraction: 'Hoy, 10:15 hs',
             totalOrders: 3,
             totalSpent: 5100.00,
-            status: 'bot_handling'
+            status: 'bot_handling',
+            notes: 'Cliente de Palermo. Siempre pide salsa picante extra.'
           },
           {
             id: 'c2',
@@ -109,7 +118,8 @@ export default function ClientesPage({ params }: ClientesPageProps) {
             lastInteraction: 'Hoy, 14:32 hs',
             totalOrders: 5,
             totalSpent: 8900.00,
-            status: 'bot_handling'
+            status: 'bot_handling',
+            notes: 'Frecuente. Prefiere retirar por sucursal.'
           },
           {
             id: 'c3',
@@ -118,7 +128,8 @@ export default function ClientesPage({ params }: ClientesPageProps) {
             lastInteraction: 'Ayer, 17:05 hs',
             totalOrders: 1,
             totalSpent: 3200.00,
-            status: 'human_required'
+            status: 'human_required',
+            notes: 'Interesado en planes corporativos de membresía.'
           },
           {
             id: 'c4',
@@ -127,7 +138,8 @@ export default function ClientesPage({ params }: ClientesPageProps) {
             lastInteraction: '17 Jun, 09:12 hs',
             totalOrders: 0,
             totalSpent: 0.00,
-            status: 'bot_handling'
+            status: 'bot_handling',
+            notes: 'Solo consultó por horarios.'
           },
           {
             id: 'c5',
@@ -136,7 +148,8 @@ export default function ClientesPage({ params }: ClientesPageProps) {
             lastInteraction: '15 Jun, 16:20 hs',
             totalOrders: 1,
             totalSpent: 1000.00,
-            status: 'bot_handling'
+            status: 'bot_handling',
+            notes: ''
           }
         ])
       } finally {
@@ -144,7 +157,10 @@ export default function ClientesPage({ params }: ClientesPageProps) {
       }
     }
 
-    fetchCustomers()
+    const loadRefreshed = async () => {
+      await fetchCustomers()
+    }
+    loadRefreshed()
   }, [businessId, supabase])
 
   // Modificar el estado del bot (Takeover)
@@ -154,7 +170,6 @@ export default function ClientesPage({ params }: ClientesPageProps) {
     
     try {
       if (!dbConnected || businessId.startsWith('demo-') || businessId === 'zapas-premium') {
-        // Simulación
         setTimeout(() => {
           setCustomers(prev => prev.map(c => c.id === customerId ? { ...c, status: nextStatus } : c))
           setTogglingId(null)
@@ -177,8 +192,49 @@ export default function ClientesPage({ params }: ClientesPageProps) {
     }
   }
 
+  // Cargar datos para edición de alias/notas
+  const handleEditClick = (c: Customer) => {
+    setEditingCustomer(c)
+    setNewName(c.name.startsWith('Cliente #') ? '' : c.name)
+    setNewNotes(c.notes || '')
+  }
+
+  // Guardar alias/notas
+  const handleSaveEdit = async () => {
+    if (!editingCustomer) return
+    setIsSaving(true)
+
+    const finalName = newName.trim() || editingCustomer.name
+
+    try {
+      if (!dbConnected || businessId.startsWith('demo-') || businessId === 'zapas-premium') {
+        setCustomers(prev => prev.map(c => c.id === editingCustomer.id ? { ...c, name: finalName, notes: newNotes } : c))
+        setEditingCustomer(null)
+        return
+      }
+
+      const { error } = await supabase
+        .from('chat_sessions')
+        .update({
+          customer_name: finalName,
+          notes: newNotes
+        })
+        .eq('id', editingCustomer.id)
+
+      if (error) throw error
+
+      setCustomers(prev => prev.map(c => c.id === editingCustomer.id ? { ...c, name: finalName, notes: newNotes } : c))
+      setEditingCustomer(null)
+    } catch (err) {
+      console.error("Error al guardar anotación:", err)
+      alert("No se pudo guardar la anotación de cliente.")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans">
       {/* Alerta demo */}
       {!dbConnected && (
         <div className="p-3 bg-zinc-900/60 border border-zinc-800 text-zinc-400 rounded-xl text-xs flex items-center gap-2">
@@ -195,7 +251,7 @@ export default function ClientesPage({ params }: ClientesPageProps) {
             Directorio de Clientes Frecuentes
           </h1>
           <p className="text-xs text-zinc-500">
-            Visualiza a las personas que han interactuado con tu negocio. Revisa su facturación acumulada o interviene de forma manual pausando el bot.
+            Visualiza a las personas que han interactuado con tu negocio. Revisa su facturación acumulada, agrega notas internas o interviene pausando el bot.
           </p>
         </div>
       </div>
@@ -211,14 +267,14 @@ export default function ClientesPage({ params }: ClientesPageProps) {
           {isLoading ? (
             <div className="text-center py-20 text-xs text-zinc-500">Cargando directorio de clientes...</div>
           ) : customers.length === 0 ? (
-            <div className="text-center py-20 text-xs text-zinc-600">No hay clientes interactuando aún.</div>
+            <div className="text-center py-20 text-xs text-zinc-650">No hay clientes registrados aún.</div>
           ) : (
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-zinc-800 text-[10px] uppercase tracking-wider text-zinc-500 bg-zinc-950/40 font-semibold">
                   <th className="px-6 py-4">Nombre / Alias</th>
                   <th className="px-6 py-4">Teléfono WhatsApp</th>
-                  <th className="px-6 py-4 text-center">Último Mensaje</th>
+                  <th className="px-6 py-4 text-center">Última Actividad</th>
                   <th className="px-6 py-4 text-center">Órdenes</th>
                   <th className="px-6 py-4 text-center">Total Gastado</th>
                   <th className="px-6 py-4 text-center">Estado de IA</th>
@@ -229,12 +285,19 @@ export default function ClientesPage({ params }: ClientesPageProps) {
                 {customers.map((c) => (
                   <tr key={c.id} className="hover:bg-zinc-900/10 transition-colors group">
                     
-                    {/* 1. Nombre */}
-                    <td className="px-6 py-4 font-bold text-white flex items-center gap-2">
-                      <div className="h-7 w-7 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold text-xs uppercase">
-                        {c.name.substring(0, 2)}
+                    {/* 1. Nombre y Notas */}
+                    <td className="px-6 py-4 text-white">
+                      <div className="flex items-center gap-2 font-bold">
+                        <div className="h-7 w-7 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold text-xs uppercase">
+                          {c.name.substring(0, 2)}
+                        </div>
+                        <span>{c.name}</span>
                       </div>
-                      <span>{c.name}</span>
+                      {c.notes && (
+                        <div className="text-[10px] text-zinc-500 italic mt-1 max-w-[220px] truncate" title={c.notes}>
+                          📝 {c.notes}
+                        </div>
+                      )}
                     </td>
 
                     {/* 2. Teléfono */}
@@ -246,7 +309,7 @@ export default function ClientesPage({ params }: ClientesPageProps) {
                     </td>
 
                     {/* 3. Última Interacción */}
-                    <td className="px-6 py-4 text-center text-zinc-400">
+                    <td className="px-6 py-4 text-center text-zinc-400 font-mono">
                       {c.lastInteraction}
                     </td>
 
@@ -268,12 +331,12 @@ export default function ClientesPage({ params }: ClientesPageProps) {
                       <button
                         onClick={() => toggleBotStatus(c.id, c.status)}
                         disabled={togglingId === c.id}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-colors ${
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-colors cursor-pointer ${
                           c.status === 'bot_handling'
                             ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20'
                             : 'bg-red-500/10 border-red-500/20 text-red-400 animate-pulse hover:bg-red-500/20'
                         }`}
-                        title="Haz click para pausar o reactivar el bot de IA para este cliente."
+                        title="Pausar o reactivar respuestas del bot."
                       >
                         {c.status === 'bot_handling' ? (
                           <>
@@ -290,10 +353,16 @@ export default function ClientesPage({ params }: ClientesPageProps) {
                     </td>
 
                     {/* 7. Acciones */}
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-6 py-4 text-right space-x-2">
+                      <button
+                        onClick={() => handleEditClick(c)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-zinc-800 text-zinc-400 hover:text-white bg-zinc-900/60 hover:bg-zinc-800 px-2 py-1.5 text-[11px] font-bold transition-all cursor-pointer"
+                      >
+                        ✏️ Notas / Alias
+                      </button>
                       <Link
                         href={`/dashboard/${businessId}/chat`}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-850 px-3 py-1.5 text-[11px] font-bold transition-all"
+                        className="inline-flex items-center gap-1 rounded-lg border border-zinc-800 text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-850 px-2.5 py-1.5 text-[11px] font-bold transition-all"
                       >
                         <MessageSquare className="h-3.5 w-3.5 text-zinc-500" />
                         <span>Abrir Chat</span>
@@ -307,6 +376,63 @@ export default function ClientesPage({ params }: ClientesPageProps) {
           )}
         </div>
       </div>
+
+      {/* Modal para Editar Notas y Alias */}
+      {editingCustomer && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 max-w-md w-full space-y-4 text-white">
+            <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider">Notas y Alias del Cliente</h3>
+              <button 
+                onClick={() => setEditingCustomer(null)}
+                className="text-zinc-500 hover:text-white cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[10px] text-zinc-500 uppercase font-bold tracking-wider">Alias / Nombre Personalizado</label>
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Ej: Juan de Palermo"
+                  className="mt-1.5 block w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-white placeholder-zinc-650 focus:border-purple-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-zinc-550 uppercase font-bold tracking-wider">Notas Internas de CRM</label>
+                <textarea
+                  value={newNotes}
+                  onChange={(e) => setNewNotes(e.target.value)}
+                  placeholder="Ej: Prefiere delivery rápido. Alérgico a la cebolla."
+                  rows={4}
+                  className="mt-1.5 block w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-white placeholder-zinc-650 focus:border-purple-500 focus:outline-none resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setEditingCustomer(null)}
+                className="rounded-lg border border-zinc-800 px-4 py-2 text-xs font-semibold hover:bg-zinc-900 transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={isSaving}
+                className="rounded-lg bg-purple-600 px-4 py-2 text-xs font-bold text-white hover:bg-purple-500 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                {isSaving ? 'Guardando...' : 'Guardar Anotación'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

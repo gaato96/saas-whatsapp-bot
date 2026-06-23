@@ -37,4 +37,29 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
+
+/* Light Theme Variables Overrides for Tailwind CSS v4 */
+body.theme-light {
+  --background: #f4f6f8;
+  --foreground: #1c272e;
+  
+  --color-zinc-950: #ffffff; /* Fondo primario blanco para tarjetas e inputs */
+  --color-zinc-900: #f4f6f8; /* Fondo secundario claro */
+  --color-zinc-800: #eaeef1; /* Paneles y sidebar claros */
+  --color-zinc-850: #d1d7db; /* Bordes claros y elementos activos */
+  
+  --color-zinc-100: #111b21; /* Texto principal oscuro */
+  --color-zinc-200: #1c272e;
+  --color-zinc-300: #2a3942; /* Texto intermedio */
+  --color-zinc-400: #54656f; /* Texto secundario */
+  --color-zinc-500: #667781;
+  --color-zinc-600: #8696a0; /* Placeholders y bordes sutiles */
+  
+  /* Ajuste de colores del bot en modo claro */
+  --color-purple-200: #075e54; /* Texto del bot en color verde oscuro */
+  --color-purple-950: #e8f9f5; /* Burbuja del bot verde muy claro */
+  --color-purple-900: #d1f3eb;
+}
+

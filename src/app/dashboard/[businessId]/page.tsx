@@ -2,6 +2,8 @@ import React from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { RealtimeOrders } from '@/components/realtime-orders'
 
+import { redirect } from 'next/navigation'
+
 interface DashboardPageProps {
   params: Promise<{ businessId: string }>
 }
@@ -9,9 +11,34 @@ interface DashboardPageProps {
 export default async function DashboardPage({ params }: DashboardPageProps) {
   const { businessId } = await params
   let initialOrders: any[] = []
+  let enabledModules: string[] = ['crm', 'catalog', 'chat', 'clients']
 
   try {
     const supabase = await createClient()
+    const { data: biz } = await supabase
+      .from('businesses')
+      .select('rubro, enabled_modules')
+      .eq('id', businessId)
+      .single()
+
+    if (biz) {
+      enabledModules = biz.enabled_modules || []
+    } else {
+      // Mapear demos para pruebas locales
+      if (businessId === 'demo-peluqueria-id') {
+        enabledModules = ['agenda', 'catalog', 'chat', 'clients', 'ai_config', 'business_config', 'whatsapp_config']
+      } else if (businessId === 'demo-business-id' || businessId === 'demo-restaurante-id') {
+        enabledModules = ['crm', 'catalog', 'chat', 'clients', 'ai_config', 'business_config', 'whatsapp_config']
+      }
+    }
+
+    const hasCRM = enabledModules.includes('crm')
+    const hasAgenda = enabledModules.includes('agenda')
+
+    if (!hasCRM && hasAgenda) {
+      redirect(`/dashboard/${businessId}/agenda`)
+    }
+
     const { data } = await supabase
       .from('orders_bookings')
       .select('id, business_id, customer_phone, status, payment_method, total, items, created_at')
@@ -20,7 +47,7 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
 
     initialOrders = data || []
   } catch (err) {
-    console.log("No se pudieron cargar órdenes desde base de datos, cargando demo en cliente.")
+    console.log("No se pudieron cargar órdenes o validar módulos, cargando defaults.", err)
   }
 
   return (
