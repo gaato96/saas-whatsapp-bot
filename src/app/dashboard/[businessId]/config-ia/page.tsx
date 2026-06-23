@@ -128,12 +128,6 @@ export default function ConfigIAPage({ params }: ConfigIAPageProps) {
     setErrorMsg('')
     setSuccessMsg('')
 
-    const customMetadataPayload = {
-      ...rubroConfig,
-      system_prompt: systemPrompt,
-      special_instructions: specialInstructions,
-    }
-
     try {
       if (!dbConnected || businessId.startsWith('demo-') || businessId === 'zapas-premium') {
         // Modo demo local
@@ -143,6 +137,25 @@ export default function ConfigIAPage({ params }: ConfigIAPageProps) {
           setTimeout(() => setSuccessMsg(''), 4000)
         }, 800)
         return
+      }
+
+      // Obtener la metadata actual para no perder los campos generales del negocio (address, socials, etc.)
+      let currentMetadata: any = {}
+      const { data: currentData } = await supabase
+        .from('business_rubro_data')
+        .select('custom_metadata')
+        .eq('business_id', businessId)
+        .single()
+      
+      if (currentData?.custom_metadata) {
+        currentMetadata = currentData.custom_metadata
+      }
+
+      const customMetadataPayload = {
+        ...currentMetadata,
+        ...rubroConfig,
+        system_prompt: systemPrompt,
+        special_instructions: specialInstructions,
       }
 
       // 1. Intentar actualizar business_rubro_data

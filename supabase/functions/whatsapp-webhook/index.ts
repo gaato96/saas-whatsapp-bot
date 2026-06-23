@@ -345,6 +345,7 @@ serve(async (req) => {
       try {
         // 2. Registrar log inicial en segundo plano y obtener su ID
         let currentLogId = null
+        let currentLogCreatedAt = null
         try {
           const { data: logRes, error: logErr } = await supabaseAdmin
             .from("webhook_logs")
@@ -353,11 +354,14 @@ serve(async (req) => {
               url: req.url,
               payload: body
             })
-            .select("id")
+            .select("id, created_at")
             .single()
           
-          if (!logErr && logRes) {
+          if (logErr) {
+            console.error("Error devuelto al registrar log inicial:", logErr)
+          } else if (logRes) {
             currentLogId = logRes.id
+            currentLogCreatedAt = logRes.created_at
           }
         } catch (logErr) {
           console.error("Error al registrar log inicial:", logErr)
@@ -386,16 +390,17 @@ serve(async (req) => {
 
         // 4. Control de duplicados en segundo plano: consultar logs recientes y comparar en JS
         const messageId = messageObj.id
-        if (messageId && currentLogId) {
+        if (messageId && currentLogId && currentLogCreatedAt) {
           try {
             const { data: recentLogs } = await supabaseAdmin
               .from("webhook_logs")
-              .select("id, payload")
+              .select("id, created_at, payload")
               .order("created_at", { ascending: false })
               .limit(20)
             
             const isDuplicate = recentLogs?.some(log => 
               log.id !== currentLogId && 
+              new Date(log.created_at).getTime() < new Date(currentLogCreatedAt).getTime() &&
               log.payload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.id === messageId
             )
             

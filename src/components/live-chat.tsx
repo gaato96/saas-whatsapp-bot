@@ -271,7 +271,10 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
           const newMsg = payload.new as Message
           // Si el mensaje pertenece al chat seleccionado, añadirlo al feed
           if (newMsg.session_id === selectedSessionId) {
-            setMessages((prev) => [...prev, newMsg])
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === newMsg.id)) return prev
+              return [...prev, newMsg]
+            })
           }
           
           // Actualizar la fecha de última interacción en la lista de la barra lateral
@@ -459,15 +462,27 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
       return
     }
 
-    const { error } = await supabase.from('chat_history').insert({
-      session_id: selectedSessionId,
-      sender: 'agent',
-      message_text: msgText,
-    })
+    try {
+      const res = await fetch('/api/chat/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: selectedSessionId, messageText: msgText })
+      })
+      const data = await res.json()
+      
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Error al enviar el mensaje')
+      }
 
-    if (error) {
-      console.error("Error al enviar mensaje:", error)
-      alert("No se pudo enviar el mensaje.")
+      if (data.success && data.message) {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === data.message.id)) return prev
+          return [...prev, data.message]
+        })
+      }
+    } catch (err: any) {
+      console.error("Error al enviar mensaje:", err)
+      alert(`No se pudo enviar el mensaje: ${err.message}`)
     }
   }
 
