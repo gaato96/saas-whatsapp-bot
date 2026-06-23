@@ -254,388 +254,391 @@ serve(async (req) => {
       console.error("Error al registrar log inicial:", logErr)
     }
 
-    try {
-      if (!body) {
-        return new Response("Payload vacío", { status: 200 })
-      }
-      
-      // 1. Validar que la estructura del mensaje contenga datos válidos
-      const entry = body.entry?.[0]
-      const change = entry?.changes?.[0]
-      const value = change?.value
+    if (!body) {
+      return new Response("Payload vacío", { status: 200 })
+    }
 
-      if (!value) {
-        return new Response("Formato de payload desconocido", { status: 200 })
-      }
+    // Procesar en segundo plano para responderle a Meta en menos de 3 segundos
+    const processPromise = (async () => {
+      try {
+        // 1. Validar que la estructura del mensaje contenga datos válidos
+        const entry = body.entry?.[0]
+        const change = entry?.changes?.[0]
+        const value = change?.value
 
-      // Validar si es una notificación de entrega/lectura (no procesamos loops)
-      if (value.statuses) {
-        // WhatsApp envía notificaciones de entrega (read/delivered). Retornamos 200 para avisar a Meta que lo recibimos.
-        return new Response("Notificación de estado ignorada", { status: 200 })
-      }
+        if (!value) {
+          console.log("Formato de payload desconocido o vacío")
+          return
+        }
 
-      const messageObj = value.messages?.[0]
-      if (!messageObj) {
-        return new Response("Sin mensajes nuevos en el payload", { status: 200 })
-      }
+        // Validar si es una notificación de entrega/lectura (no procesamos loops)
+        if (value.statuses) {
+          return
+        }
 
-      const customerPhone = messageObj.from
-      const phoneId = value.metadata?.phone_number_id // ID del teléfono Meta receptor
-      const messageType = messageObj.type // "text", "audio", "image", etc.
+        const messageObj = value.messages?.[0]
+        if (!messageObj) {
+          console.log("Sin mensajes nuevos en el payload")
+          return
+        }
 
-      let messageText = ""
-      let isAudioTranscription = false
+        const customerPhone = messageObj.from
+        const phoneId = value.metadata?.phone_number_id // ID del teléfono Meta receptor
+        const messageType = messageObj.type // "text", "audio", "image", etc.
 
-      if (messageType === "text") {
-        messageText = messageObj.text?.body?.trim() || ""
-      } else if (messageType === "audio") {
-        // Procesar mensaje de voz: descargar y transcribir con Gemini
-        const mediaId = messageObj.audio?.id
-        console.log(`Mensaje de audio recibido de ${customerPhone}. Media ID: ${mediaId}`)
-        // Marcamos como pendiente; el token de WhatsApp se obtiene después de buscar el negocio
-        messageText = `__AUDIO_PENDING__:${mediaId}`
-        isAudioTranscription = true
-      } else {
-        // Ignorar otros tipos (imagen, video, documento, sticker, etc.)
-        console.log(`Tipo de mensaje no soportado: "${messageType}". Ignorando.`)
-        return new Response("Tipo de mensaje no soportado", { status: 200 })
-      }
+        let messageText = ""
+        let isAudioTranscription = false
 
-      if (!messageText) {
-        return new Response("Mensaje sin contenido ignorado", { status: 200 })
-      }
+        if (messageType === "text") {
+          messageText = messageObj.text?.body?.trim() || ""
+        } else if (messageType === "audio") {
+          // Procesar mensaje de voz: descargar y transcribir con Gemini
+          const mediaId = messageObj.audio?.id
+          console.log(`Mensaje de audio recibido de ${customerPhone}. Media ID: ${mediaId}`)
+          // Marcamos como pendiente; el token de WhatsApp se obtiene después de buscar el negocio
+          messageText = `__AUDIO_PENDING__:${mediaId}`
+          isAudioTranscription = true
+        } else {
+          // Ignorar otros tipos (imagen, video, documento, sticker, etc.)
+          console.log(`Tipo de mensaje no soportado: "${messageType}". Ignorando.`)
+          return
+        }
 
-      console.log(`Mensaje entrante de: ${customerPhone} al número receptor Meta: ${phoneId}. Tipo: ${messageType}`)
+        if (!messageText) {
+          console.log("Mensaje sin contenido ignorado")
+          return
+        }
 
-      // 2. Buscar negocio en base de datos usando el Phone Number ID de Meta
-      let business = null
-      let businessId = queryBusinessId
+        console.log(`Mensaje entrante de: ${customerPhone} al número receptor Meta: ${phoneId}. Tipo: ${messageType}`)
 
-      if (phoneId) {
-        const { data, error } = await supabaseAdmin
-          .from("businesses")
-          .select("id, name, rubro, whatsapp_config")
-          .eq("whatsapp_config->>phone_number_id", phoneId)
+        // 2. Buscar negocio en base de datos usando el Phone Number ID de Meta
+        let business = null
+        let businessId = queryBusinessId
+
+        if (phoneId) {
+          const { data, error } = await supabaseAdmin
+            .from("businesses")
+            .select("id, name, rubro, whatsapp_config")
+            .eq("whatsapp_config->>phone_number_id", phoneId)
+            .maybeSingle()
+
+          if (!error && data) {
+            business = data
+            businessId = data.id
+          }
+        }
+
+        // Fallback a buscar por ID directo si venía en los parámetros de la URL
+        if (!business && businessId) {
+          const { data, error } = await supabaseAdmin
+            .from("businesses")
+            .select("id, name, rubro, whatsapp_config")
+            .eq("id", businessId)
+            .maybeSingle()
+          
+          if (!error && data) {
+            business = data
+          }
+        }
+
+        if (!business) {
+          console.error(`Error: No se encontró ningún negocio configurado para el Phone Number ID: ${phoneId} o Business ID: ${businessId}`)
+          return
+        }
+
+        // 3. Obtener metadata de rubro y catálogo de productos activos
+        const { data: rubroData } = await supabaseAdmin
+          .from("business_rubro_data")
+          .select("custom_metadata")
+          .eq("business_id", business.id)
           .maybeSingle()
 
-        if (!error && data) {
-          business = data
-          businessId = data.id
-        }
-      }
+        const { data: products } = await supabaseAdmin
+          .from("products_services")
+          .select("id, name, description, price, stock")
+          .eq("business_id", business.id)
+          .eq("is_active", true)
 
-      // Fallback a buscar por ID directo si venía en los parámetros de la URL
-      if (!business && businessId) {
-        const { data, error } = await supabaseAdmin
-          .from("businesses")
-          .select("id, name, rubro, whatsapp_config")
-          .eq("id", businessId)
-          .maybeSingle()
-        
-        if (!error && data) {
-          business = data
-        }
-      }
+        const rubroConfig = rubroData?.custom_metadata || {}
+        const activeProducts = products || []
 
-      if (!business) {
-        console.error(`Error: No se encontró ningún negocio configurado para el Phone Number ID: ${phoneId} o Business ID: ${businessId}`)
-        return new Response("Negocio no configurado en la plataforma", { status: 200 })
-      }
-
-      // 3. Obtener metadata de rubro y catálogo de productos activos
-      const { data: rubroData } = await supabaseAdmin
-        .from("business_rubro_data")
-        .select("custom_metadata")
-        .eq("business_id", business.id)
-        .maybeSingle()
-
-      const { data: products } = await supabaseAdmin
-        .from("products_services")
-        .select("id, name, description, price, stock")
-        .eq("business_id", business.id)
-        .eq("is_active", true)
-
-      const rubroConfig = rubroData?.custom_metadata || {}
-      const activeProducts = products || []
-
-      // 4. Recuperar o crear la sesión de conversación
-      let { data: session } = await supabaseAdmin
-        .from("chat_sessions")
-        .select("id, status")
-        .eq("business_id", business.id)
-        .eq("customer_phone", customerPhone)
-        .maybeSingle()
-
-      if (!session) {
-        const { data: newSession, error: createSessionError } = await supabaseAdmin
+        // 4. Recuperar o crear la sesión de conversación
+        let { data: session } = await supabaseAdmin
           .from("chat_sessions")
-          .insert({
-            business_id: business.id,
-            customer_phone: customerPhone,
-            status: "bot_handling",
-            last_interaction: new Date().toISOString()
-          })
-          .select()
-          .single()
+          .select("id, status")
+          .eq("business_id", business.id)
+          .eq("customer_phone", customerPhone)
+          .maybeSingle()
 
-        if (createSessionError) {
-          console.error("Error creando sesión:", createSessionError)
-          return new Response("Error DB", { status: 500 })
-        }
-        session = newSession
-      }
-
-      // Si el chat está bloqueado por takeover humano, ignoramos las peticiones para no interferir con el agente
-      if (session.status === "human_required") {
-        console.log(`Sesión de ${customerPhone} está en modo manual (Agente Humano). Ignorando respuesta del bot.`)
-        return new Response("Intervención humana activa", { status: 200 })
-      }
-
-      // 5a. Si el mensaje era un audio, transcribirlo ahora que tenemos el token
-      if (isAudioTranscription && messageText.startsWith("__AUDIO_PENDING__:")) {
-        const mediaId = messageText.replace("__AUDIO_PENDING__:", "")
-        const waToken = business.whatsapp_config?.access_token
-        if (!waToken) {
-          console.error("No hay access_token configurado para transcribir audio.")
-          return new Response("Token de WhatsApp no configurado", { status: 200 })
-        }
-        try {
-          console.log(`Transcribiendo audio con Gemini... Media ID: ${mediaId}`)
-          const transcript = await transcribeAudio(mediaId, waToken)
-          if (!transcript) {
-            console.warn("Transcripción vacía, ignorando mensaje de audio.")
-            return new Response("Transcripción vacía", { status: 200 })
-          }
-          messageText = transcript
-          console.log(`Audio transcripto con éxito: "${messageText}"`)
-        } catch (audioErr) {
-          console.error("Error transcribiendo audio:", audioErr)
-          // Notificar al cliente que no se pudo procesar el audio
-          const waToken2 = business.whatsapp_config?.access_token
-          if (waToken2 && phoneId) {
-            await fetch(`https://graph.facebook.com/v22.0/${phoneId}/messages`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${waToken2}` },
-              body: JSON.stringify({
-                messaging_product: "whatsapp",
-                to: customerPhone,
-                type: "text",
-                text: { body: "Lo siento, no pude procesar tu mensaje de voz en este momento. Por favor, escribe tu consulta por texto. 🙏" }
-              })
+        if (!session) {
+          const { data: newSession, error: createSessionError } = await supabaseAdmin
+            .from("chat_sessions")
+            .insert({
+              business_id: business.id,
+              customer_phone: customerPhone,
+              status: "bot_handling",
+              last_interaction: new Date().toISOString()
             })
+            .select()
+            .single()
+
+          if (createSessionError) {
+            console.error("Error creando sesión:", createSessionError)
+            return
           }
-          return new Response("Error de transcripción", { status: 200 })
+          session = newSession
         }
-      }
 
-      // 5b. Guardar el mensaje entrante del cliente en el historial
-      const storedText = isAudioTranscription ? `🎙️ [Mensaje de voz transcripto]: ${messageText}` : messageText
-      await supabaseAdmin.from("chat_history").insert({
-        session_id: session.id,
-        sender: "customer",
-        message_text: storedText,
-        timestamp: new Date().toISOString()
-      })
+        // Si el chat está bloqueado por takeover humano, ignoramos las peticiones para no interferir con el agente
+        if (session.status === "human_required") {
+          console.log(`Sesión de ${customerPhone} está en modo manual (Agente Humano). Ignorando respuesta del bot.`)
+          return
+        }
 
-      // Actualizar la última fecha de interacción de la sesión
-      await supabaseAdmin
-        .from("chat_sessions")
-        .update({ last_interaction: new Date().toISOString() })
-        .eq("id", session.id)
-
-      // 6. Cargar historial de chat reciente (Últimos 10 mensajes)
-      const { data: rawHistory } = await supabaseAdmin
-        .from("chat_history")
-        .select("sender, message_text, timestamp")
-        .eq("session_id", session.id)
-        .order("timestamp", { ascending: false })
-        .limit(10)
-
-      const chatHistory = rawHistory ? [...rawHistory].reverse() : []
-
-      // 7. Construir System Prompt dinámico
-      const systemPrompt = buildSystemPrompt(business.name, business.rubro, rubroConfig, activeProducts)
-
-      // Formatear el historial en la estructura de roles de la API de Gemini
-      const contents = chatHistory.map(h => ({
-        role: h.sender === "customer" ? "user" : "model",
-        parts: [{ text: h.message_text }]
-      }))
-
-      // ==========================================
-      // C. CONEXIÓN CON LA API DE GEMINI 2.5 FLASH
-      // ==========================================
-      const callGemini = async (conversationContents: any[]) => {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
-        
-        const payload = {
-          contents: conversationContents,
-          systemInstruction: {
-            parts: [{ text: systemPrompt }]
-          },
-          generationConfig: {
-            temperature: 0.2, // Baja temperatura para mantener rigidez en lógica de venta y stock
-            maxOutputTokens: 1000
+        // 5a. Si el mensaje era un audio, transcribirlo ahora que tenemos el token
+        if (isAudioTranscription && messageText.startsWith("__AUDIO_PENDING__:")) {
+          const mediaId = messageText.replace("__AUDIO_PENDING__:", "")
+          const waToken = business.whatsapp_config?.access_token
+          if (!waToken) {
+            console.error("No hay access_token configurado para transcribir audio.")
+            return
+          }
+          try {
+            console.log(`Transcribiendo audio con Gemini... Media ID: ${mediaId}`)
+            const transcript = await transcribeAudio(mediaId, waToken)
+            if (!transcript) {
+              console.warn("Transcripción vacía, ignorando mensaje de audio.")
+              return
+            }
+            messageText = transcript
+            console.log(`Audio transcripto con éxito: "${messageText}"`)
+          } catch (audioErr) {
+            console.error("Error transcribiendo audio:", audioErr)
+            // Notificar al cliente que no se pudo procesar el audio
+            const waToken2 = business.whatsapp_config?.access_token
+            if (waToken2 && phoneId) {
+              await fetch(`https://graph.facebook.com/v22.0/${phoneId}/messages`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${waToken2}` },
+                body: JSON.stringify({
+                  messaging_product: "whatsapp",
+                  to: customerPhone,
+                  type: "text",
+                  text: { body: "Lo siento, no pude procesar tu mensaje de voz en este momento. Por favor, escribe tu consulta por texto. 🙏" }
+                })
+              })
+            }
+            return
           }
         }
 
-        const response = await fetch(geminiUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
+        // 5b. Guardar el mensaje entrante del cliente en el historial
+        const storedText = isAudioTranscription ? `🎙️ [Mensaje de voz transcripto]: ${messageText}` : messageText
+        await supabaseAdmin.from("chat_history").insert({
+          session_id: session.id,
+          sender: "customer",
+          message_text: storedText,
+          timestamp: new Date().toISOString()
         })
 
-        if (!response.ok) {
-          const errText = await response.text()
-          throw new Error(`Error en llamada a Gemini API: ${errText}`)
-        }
-
-        const data = await response.json()
-        return data.candidates?.[0]?.content?.parts?.[0]?.text || ""
-      }
-
-      console.log("Invocando a Gemini 2.5 Flash...")
-      let aiResponse = await callGemini(contents)
-      console.log("Respuesta de Gemini recibida:", aiResponse)
-
-      // ==========================================
-      // D. PROCESAMIENTO DE ACCIONES Y AUTOCORRECCIÓN
-      // ==========================================
-      let userFacingMessage = aiResponse
-      let isHumanRequired = false
-      let orderToCreate = null
-
-      // Evaluar si la IA solicita pasar al agente humano
-      if (userFacingMessage.includes("[HUMAN_REQUIRED]")) {
-        isHumanRequired = true
-        userFacingMessage = userFacingMessage.replace("[HUMAN_REQUIRED]", "").trim()
-      }
-
-      // Evaluar si la IA generó una etiqueta de orden cerrada
-      const orderJsonRegex = /\[ORDER_JSON:\s*({.*?})\]/s
-      const match = userFacingMessage.match(orderJsonRegex)
-      if (match) {
-        try {
-          orderToCreate = JSON.parse(match[1])
-          // Remover la etiqueta cruda del mensaje que va al cliente de WhatsApp
-          userFacingMessage = userFacingMessage.replace(orderJsonRegex, "").trim()
-          console.log(`Orden parseada con éxito para procesar:`, orderToCreate)
-        } catch (jsonErr) {
-          console.error("Error parseando etiqueta de orden JSON de Gemini:", jsonErr)
-        }
-      }
-
-      // Si hay una orden, ejecutar el checkout transaccional en la DB
-      if (orderToCreate) {
-        console.log("Ejecutando proceso de checkout automático en Supabase...")
-        
-        // Llamada a la función PostgreSQL process_automatic_checkout
-        const { data: checkoutResult, error: rpcErr } = await supabaseAdmin.rpc(
-          "process_automatic_checkout",
-          {
-            p_business_id: business.id,
-            p_customer_phone: customerPhone,
-            p_payment_method: orderToCreate.payment_method,
-            p_total: orderToCreate.total,
-            p_items: orderToCreate.items
-          }
-        )
-
-        if (rpcErr || !checkoutResult?.success) {
-          const errorMsg = rpcErr?.message || checkoutResult?.error || "Error al verificar stock o crear el pedido."
-          console.warn(`[AUTOCORRECCIÓN] Fallo de stock detectado: ${errorMsg}`)
-
-          // Inyectar el fallo en el historial del chat y forzar una re-evaluación con Gemini
-          const correctionMessage = `SISTEMA: El pedido no se pudo procesar debido a este error: "${errorMsg}". Informa amablemente al usuario de esta situación para que cambie la cantidad o el producto. Tu catálogo actual refleja el stock real.`
-          
-          const correctedContents = [
-            ...contents,
-            { role: "model", parts: [{ text: aiResponse }] },
-            { role: "user", parts: [{ text: correctionMessage }] }
-          ]
-
-          console.log("Invocando re-evaluación en Gemini por error de stock...")
-          const correctedAiResponse = await callGemini(correctedContents)
-          userFacingMessage = correctedAiResponse.replace(orderJsonRegex, "").replace("[HUMAN_REQUIRED]", "").trim()
-          console.log("Respuesta corregida de Gemini:", userFacingMessage)
-        } else {
-          console.log(`Pedido creado exitosamente con ID: ${checkoutResult.order_id}`)
-        }
-      }
-
-      // Si se detectó requerimiento humano, actualizar la sesión
-      if (isHumanRequired) {
+        // Actualizar la última fecha de interacción de la sesión
         await supabaseAdmin
           .from("chat_sessions")
-          .update({ status: "human_required" })
+          .update({ last_interaction: new Date().toISOString() })
           .eq("id", session.id)
-        
-        console.log(`La sesión de ${customerPhone} ha sido transferida a un agente humano.`)
-      }
 
-      // 8. Guardar la respuesta final de la IA en el historial
-      await supabaseAdmin.from("chat_history").insert({
-        session_id: session.id,
-        sender: "bot",
-        message_text: userFacingMessage,
-        timestamp: new Date().toISOString()
-      })
+        // 6. Cargar historial de chat reciente (Últimos 10 mensajes)
+        const { data: rawHistory } = await supabaseAdmin
+          .from("chat_history")
+          .select("sender, message_text, timestamp")
+          .eq("session_id", session.id)
+          .order("timestamp", { ascending: false })
+          .limit(10)
 
-      // ==========================================
-      // E. ENVÍO DE MENSAJE DE VUELTA A WHATSAPP
-      // ==========================================
-      const waToken = business.whatsapp_config?.access_token
-      if (waToken && phoneId) {
-        const waSendUrl = `https://graph.facebook.com/v22.0/${phoneId}/messages`
-        
-        const waPayload = {
-          messaging_product: "whatsapp",
-          recipient_type: "individual",
-          to: customerPhone,
-          type: "text",
-          text: { body: userFacingMessage },
+        const chatHistory = rawHistory ? [...rawHistory].reverse() : []
+
+        // 7. Construir System Prompt dinámico
+        const systemPrompt = buildSystemPrompt(business.name, business.rubro, rubroConfig, activeProducts)
+
+        // Formatear el historial en la estructura de roles de la API de Gemini
+        const contents = chatHistory.map(h => ({
+          role: h.sender === "customer" ? "user" : "model",
+          parts: [{ text: h.message_text }]
+        }))
+
+        // ==========================================
+        // C. CONEXIÓN CON LA API DE GEMINI 2.5 FLASH
+        // ==========================================
+        const callGemini = async (conversationContents: any[]) => {
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
+          
+          const payload = {
+            contents: conversationContents,
+            systemInstruction: {
+              parts: [{ text: systemPrompt }]
+            },
+            generationConfig: {
+              temperature: 0.2, // Baja temperatura para mantener rigidez en lógica de venta y stock
+              maxOutputTokens: 1000
+            }
+          }
+
+          const response = await fetch(geminiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          })
+
+          if (!response.ok) {
+            const errText = await response.text()
+            throw new Error(`Error en llamada a Gemini API: ${errText}`)
+          }
+
+          const data = await response.json()
+          return data.candidates?.[0]?.content?.parts?.[0]?.text || ""
         }
 
-        console.log(`Despachando mensaje de WhatsApp a ${customerPhone}...`)
-        const waResponse = await fetch(waSendUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${waToken}`,
-          },
-          body: JSON.stringify(waPayload),
+        console.log("Invocando a Gemini 2.5 Flash...")
+        let aiResponse = await callGemini(contents)
+        console.log("Respuesta de Gemini recibida:", aiResponse)
+
+        // ==========================================
+        // D. PROCESAMIENTO DE ACCIONES Y AUTOCORRECCIÓN
+        // ==========================================
+        let userFacingMessage = aiResponse
+        let isHumanRequired = false
+        let orderToCreate = null
+
+        // Evaluar si la IA solicita pasar al agente humano
+        if (userFacingMessage.includes("[HUMAN_REQUIRED]")) {
+          isHumanRequired = true
+          userFacingMessage = userFacingMessage.replace("[HUMAN_REQUIRED]", "").trim()
+        }
+
+        // Evaluar si la IA generó una etiqueta de orden cerrada
+        const orderJsonRegex = /\[ORDER_JSON:\s*({.*?})\]/s
+        const match = userFacingMessage.match(orderJsonRegex)
+        if (match) {
+          try {
+            orderToCreate = JSON.parse(match[1])
+            // Remover la etiqueta cruda del mensaje que va al cliente de WhatsApp
+            userFacingMessage = userFacingMessage.replace(orderJsonRegex, "").trim()
+            console.log(`Orden parseada con éxito para procesar:`, orderToCreate)
+          } catch (jsonErr) {
+            console.error("Error parseando etiqueta de orden JSON de Gemini:", jsonErr)
+          }
+        }
+
+        // Si hay una orden, ejecutar el checkout transaccional en la DB
+        if (orderToCreate) {
+          console.log("Ejecutando proceso de checkout automático en Supabase...")
+          
+          // Llamada a la función PostgreSQL process_automatic_checkout
+          const { data: checkoutResult, error: rpcErr } = await supabaseAdmin.rpc(
+            "process_automatic_checkout",
+            {
+              p_business_id: business.id,
+              p_customer_phone: customerPhone,
+              p_payment_method: orderToCreate.payment_method,
+              p_total: orderToCreate.total,
+              p_items: orderToCreate.items
+            }
+          )
+
+          if (rpcErr || !checkoutResult?.success) {
+            const errorMsg = rpcErr?.message || checkoutResult?.error || "Error al verificar stock o crear el pedido."
+            console.warn(`[AUTOCORRECCIÓN] Fallo de stock detectado: ${errorMsg}`)
+
+            // Inyectar el fallo en el historial del chat y forzar una re-evaluación con Gemini
+            const correctionMessage = `SISTEMA: El pedido no se pudo procesar debido a este error: "${errorMsg}". Informa amablemente al usuario de esta situación para que cambie la cantidad o el producto. Tu catálogo actual refleja el stock real.`
+            
+            const correctedContents = [
+              ...contents,
+              { role: "model", parts: [{ text: aiResponse }] },
+              { role: "user", parts: [{ text: correctionMessage }] }
+            ]
+
+            console.log("Invocando re-evaluación en Gemini por error de stock...")
+            const correctedAiResponse = await callGemini(correctedContents)
+            userFacingMessage = correctedAiResponse.replace(orderJsonRegex, "").replace("[HUMAN_REQUIRED]", "").trim()
+            console.log("Respuesta corregida de Gemini:", userFacingMessage)
+          } else {
+            console.log(`Pedido creado exitosamente con ID: ${checkoutResult.order_id}`)
+          }
+        }
+
+        // Si se detectó requerimiento humano, actualizar la sesión
+        if (isHumanRequired) {
+          await supabaseAdmin
+            .from("chat_sessions")
+            .update({ status: "human_required" })
+            .eq("id", session.id)
+          
+          console.log(`La sesión de ${customerPhone} ha sido transferida a un agente humano.`)
+        }
+
+        // 8. Guardar la respuesta final de la IA en el historial
+        await supabaseAdmin.from("chat_history").insert({
+          session_id: session.id,
+          sender: "bot",
+          message_text: userFacingMessage,
+          timestamp: new Date().toISOString()
         })
 
-        if (!waResponse.ok) {
-          const waErrText = await waResponse.text()
-          console.error(`Error en la API de envío de WhatsApp Meta: ${waErrText}`)
+        // ==========================================
+        // E. ENVÍO DE MENSAJE DE VUELTA A WHATSAPP
+        // ==========================================
+        const waToken = business.whatsapp_config?.access_token
+        if (waToken && phoneId) {
+          const waSendUrl = `https://graph.facebook.com/v22.0/${phoneId}/messages`
+          
+          const waPayload = {
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to: customerPhone,
+            type: "text",
+            text: { body: userFacingMessage },
+          }
+
+          console.log(`Despachando mensaje de WhatsApp a ${customerPhone}...`)
+          const waResponse = await fetch(waSendUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${waToken}`,
+            },
+            body: JSON.stringify(waPayload),
+          })
+
+          if (!waResponse.ok) {
+            const waErrText = await waResponse.text()
+            console.error(`Error en la API de envío de WhatsApp Meta: ${waErrText}`)
+          } else {
+            console.log("Mensaje de WhatsApp enviado con éxito.")
+          }
         } else {
-          console.log("Mensaje de WhatsApp enviado con éxito.")
+          console.warn("Advertencia: El negocio no tiene configurado un 'access_token' o 'phone_number_id' de WhatsApp. Se omitió el envío externo.")
         }
-      } else {
-        console.warn("Advertencia: El negocio no tiene configurado un 'access_token' o 'phone_number_id' de WhatsApp. Se omitió el envío externo.")
+      } catch (err: any) {
+        console.error("Fallo general en la ejecución del Webhook POST (segundo plano):", err)
+        try {
+          await supabaseAdmin.from("webhook_logs").insert({
+            method: "POST",
+            url: req.url,
+            payload: body,
+            error_message: err.message
+          })
+        } catch (logErr) {
+          console.error("Error al registrar log de error:", logErr)
+        }
       }
+    })()
 
-      return new Response("Mensaje procesado con éxito", { status: 200 })
-
-    } catch (err: any) {
-      console.error("Fallo general en la ejecución del Webhook POST:", err)
-      
-      // Registrar el error de procesamiento en la base de datos
-      try {
-        await supabaseAdmin.from("webhook_logs").insert({
-          method: "POST",
-          url: req.url,
-          payload: body,
-          error_message: err.message
-        })
-      } catch (logErr) {
-        console.error("Error al registrar log de error:", logErr)
-      }
-
-      // Respondemos con status 200 a Meta para que no siga reintentando infinitamente la misma petición con error
-      return new Response(`Error interno: ${err.message}`, { status: 200 })
+    if (typeof EdgeRuntime !== "undefined") {
+      (EdgeRuntime as any).waitUntil(processPromise)
     }
+
+    return new Response("Mensaje recibido", { status: 200 })
   }
 
   return new Response("Método no soportado", { status: 405 })
