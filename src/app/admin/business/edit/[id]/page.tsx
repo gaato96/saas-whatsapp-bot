@@ -103,7 +103,8 @@ export default function EditBusinessPage({ params }: EditBusinessPageProps) {
           <BusinessForm 
             initialValues={initialValues} 
             onSubmit={handleUpdateBusiness} 
-            isLoading={isSaving} 
+            isLoading={isSaving}
+            isEditing={true}
           />
         </div>
       )}
