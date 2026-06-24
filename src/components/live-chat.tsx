@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Archive, Trash2, Sparkles, X, ArchiveRestore, RefreshCw } from 'lucide-react'
 
@@ -32,6 +32,15 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     initialSessions[0]?.id || null
   )
+
+  // Ref que siempre apunta al sessionId activo — evita closures stale en el canal Realtime
+  const selectedSessionIdRef = useRef<string | null>(initialSessions[0]?.id || null)
+
+  // Wrapper para cambiar de sesión: actualiza estado Y ref de forma síncrona
+  const selectSession = useCallback((id: string | null) => {
+    selectedSessionIdRef.current = id
+    setSelectedSessionId(id)
+  }, [])
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [dbConnected, setDbConnected] = useState(true)
@@ -239,17 +248,19 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
   }, [selectedSessionId, dbConnected, businessId, supabase])
 
   // Suscripción Realtime en Supabase para Chats
+  // IMPORTANTE: los canales se crean UNA SOLA VEZ y usan `selectedSessionIdRef.current`
+  // (no el estado) para filtrar mensajes. Esto evita el closure stale que causaba
+  // que mensajes se perdieran al cambiar de sesión.
   useEffect(() => {
     if (businessId === 'demo-business-id') return
 
-    // 1. Escuchar actualizaciones en las sesiones de este negocio
+    // 1. Escuchar cambios en sesiones de este negocio
     const sessionsChannel = supabase
       .channel(`live_sessions_${businessId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'chat_sessions', filter: `business_id=eq.${businessId}` },
         (payload) => {
-          console.log('[Realtime Chat] Cambio en sesión:', payload)
           if (payload.eventType === 'INSERT') {
             const newSession = payload.new as Session
             setSessions((prev) => [newSession, ...prev])
@@ -261,7 +272,7 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
       )
       .subscribe()
 
-    // 2. Escuchar inserciones en el historial de chat
+    // 2. Escuchar nuevos mensajes — canal persistente sin re-suscripción al cambiar sesión
     const historyChannel = supabase
       .channel(`live_history_${businessId}`)
       .on(
@@ -269,21 +280,24 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
         { event: 'INSERT', schema: 'public', table: 'chat_history' },
         (payload) => {
           const newMsg = payload.new as Message
-          // Si el mensaje pertenece al chat seleccionado, añadirlo al feed
-          if (newMsg.session_id === selectedSessionId) {
+
+          // Usar la REF (no el estado) para saber qué sesión está activa en este momento
+          if (newMsg.session_id === selectedSessionIdRef.current) {
             setMessages((prev) => {
               if (prev.some((m) => m.id === newMsg.id)) return prev
               return [...prev, newMsg]
             })
           }
-          
-          // Actualizar la fecha de última interacción en la lista de la barra lateral
+
+          // Actualizar timestamp en la lista lateral y reordenar
           setSessions((prev) =>
-            prev.map((s) =>
-              s.id === newMsg.session_id
-                ? { ...s, last_interaction: newMsg.timestamp }
-                : s
-            ).sort((a, b) => new Date(b.last_interaction).getTime() - new Date(a.last_interaction).getTime())
+            prev
+              .map((s) =>
+                s.id === newMsg.session_id
+                  ? { ...s, last_interaction: newMsg.timestamp }
+                  : s
+              )
+              .sort((a, b) => new Date(b.last_interaction).getTime() - new Date(a.last_interaction).getTime())
           )
         }
       )
@@ -293,7 +307,8 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
       supabase.removeChannel(sessionsChannel)
       supabase.removeChannel(historyChannel)
     }
-  }, [businessId, selectedSessionId, supabase])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessId, supabase]) // ← selectedSessionId ELIMINADO a propósito: usamos el ref
 
   // Cambiar estado del takeover (Bot vs Humano)
   const handleToggleTakeover = async (session: Session) => {
@@ -498,13 +513,13 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
       <div className="border-r border-zinc-900 flex flex-col h-full bg-zinc-950">
         <div className="p-2 border-b border-zinc-900 flex bg-zinc-950/45 gap-1">
           <button
-            onClick={() => { setShowArchived(false); setSelectedSessionId(sessions.find(s => !s.is_archived)?.id || null); }}
+            onClick={() => { setShowArchived(false); selectSession(sessions.find(s => !s.is_archived)?.id || null); }}
             className={`flex-1 py-2 text-center text-[10px] uppercase font-bold rounded-lg transition-all ${!showArchived ? 'bg-zinc-900 text-white border border-zinc-800' : 'text-zinc-500 hover:text-zinc-350'}`}
           >
             Activos
           </button>
           <button
-            onClick={() => { setShowArchived(true); setSelectedSessionId(sessions.find(s => s.is_archived)?.id || null); }}
+            onClick={() => { setShowArchived(true); selectSession(sessions.find(s => s.is_archived)?.id || null); }}
             className={`flex-1 py-2 text-center text-[10px] uppercase font-bold rounded-lg transition-all ${showArchived ? 'bg-zinc-900 text-white border border-zinc-800' : 'text-zinc-500 hover:text-zinc-350'}`}
           >
             Archivados
@@ -522,7 +537,7 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
               return (
                 <button
                   key={s.id}
-                  onClick={() => setSelectedSessionId(s.id)}
+                  onClick={() => selectSession(s.id)}
                   className={`w-full text-left p-4 hover:bg-zinc-900/20 transition-all flex flex-col gap-2 relative border-l-4 ${
                     isSelected ? 'bg-zinc-900/40 border-l-purple-500' : 'border-l-transparent'
                   } ${
