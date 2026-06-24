@@ -88,9 +88,12 @@ const corsHeaders = {
  * Inyecta las reglas del rubro, configuración del negocio y catálogo con stock.
  */
 function buildSystemPrompt(businessName: string, rubro: string, rubroConfig: any, products: any[], localTimeStr: string) {
-  // Serializar el catálogo de productos con stock actual
+  // Serializar el catálogo de productos con stock actual (se omite para el rubro Comida)
   const catalogText = products.length > 0
-    ? products.map(p => `- ID: ${p.id} | Nombre: ${p.name} | Descripción: ${p.description || "Sin descripción"} | Precio: $${p.price} | Stock Disponible: ${p.stock}`).join("\n")
+    ? products.map(p => {
+        const stockStr = rubro === "Comida" ? "" : ` | Stock Disponible: ${p.stock}`;
+        return `- ID: ${p.id} | Nombre: ${p.name} | Descripción: ${p.description || "Sin descripción"} | Precio: $${p.price}${stockStr}`;
+      }).join("\n")
     : "No hay productos o servicios registrados en este momento.";
 
   // Generar contexto específico del rubro
@@ -104,6 +107,9 @@ function buildSystemPrompt(businessName: string, rubro: string, rubroConfig: any
 - Zonas de envío admitidas: ${rubroConfig.shipping_zones || "Todas"}.
 - Tiempo estimado de entrega: ${rubroConfig.estimated_time || "A convenir"}.
 - Datos bancarios para transferencia: Alias: ${rubroConfig.bank_details?.alias || "N/A"}, CBU: ${rubroConfig.bank_details?.cbu || "N/A"}, Titular: ${rubroConfig.bank_details?.titular || "N/A"}.
+
+DISPONIBILIDAD DE PLATOS / STOCK:
+- En tu rubro (Comida), el stock NO se gestiona en la conversación. Todos los platos y productos listados en el menú están SIEMPRE disponibles para ordenar. NUNCA le digas al cliente que un plato está agotado o que no hay stock disponible.
 
 REGLAS DE HORARIO DE ATENCIÓN (CRÍTICO):
 - La fecha y hora actual local del negocio es: **${localTimeStr}**.
