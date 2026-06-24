@@ -3,22 +3,22 @@
 // CENTRAL MULTI-TENANT WEBHOOK FOR WHATSAPP CLOUD API & GOOGLE GEMINI
 // =========================================================================
 
-// Modelos de Gemini en orden de prioridad — nombres verificados contra la API de Google.
+// Modelos de Gemini en orden de prioridad — SOLO modelos confirmados como existentes en la API de Google.
 // Si el principal se satura (503/429/404), se pasa automáticamente al siguiente.
+// IMPORTANTE: NO agregar modelos inventados (ej: gemini-3.x) — causan 404 y lentifican el fallback.
 const GEMINI_MODELS = [
-  "gemini-2.5-flash",      // Principal: excelente rendimiento (el preferido del negocio)
-  "gemini-2.5-flash-lite", // Fallback 1: versión liviana del 2.5
-  "gemini-3.1-flash-lite", // Fallback 2: versión liviana de última generación (muy estable en picos)
-  "gemini-3.5-flash",      // Fallback 3: modelo de última generación de alta velocidad
-  "gemini-2.0-flash",      // Fallback 4: modelo de generación anterior (en proceso de sunset)
-  "gemini-flash-latest",   // Fallback 5: versión 1.5 Flash (legacy de respaldo definitivo)
+  "gemini-2.5-flash",         // Principal: más inteligente y rápido del tier gratuito
+  "gemini-2.5-flash-lite-preview-06-17", // Fallback 1: versión lite verificada del 2.5
+  "gemini-2.0-flash",         // Fallback 2: generación anterior, muy estable
+  "gemini-1.5-flash",         // Fallback 3: estable y probado
+  "gemini-1.5-flash-8b",      // Fallback 4: más liviano, ideal para saturación
 ]
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 // Helper: llama a Gemini con fallback automático entre modelos si alguno está sobrecargado (503/429)
-async function callGeminiWithFallback(body: object, apiKey: string, timeoutMs = 5000): Promise<any> {
+async function callGeminiWithFallback(body: object, apiKey: string, timeoutMs = 15000): Promise<any> {
   let lastError: Error | null = null
   for (const model of GEMINI_MODELS) {
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
@@ -87,7 +87,7 @@ const corsHeaders = {
  * 1. CONSTRUCTOR DINÁMICO DEL SYSTEM PROMPT PARA GEMINI
  * Inyecta las reglas del rubro, configuración del negocio y catálogo con stock.
  */
-function buildSystemPrompt(businessName: string, rubro: string, rubroConfig: any, products: any[]) {
+function buildSystemPrompt(businessName: string, rubro: string, rubroConfig: any, products: any[], localTimeStr: string) {
   // Serializar el catálogo de productos con stock actual
   const catalogText = products.length > 0
     ? products.map(p => `- ID: ${p.id} | Nombre: ${p.name} | Descripción: ${p.description || "Sin descripción"} | Precio: $${p.price} | Stock Disponible: ${p.stock}`).join("\n")
@@ -99,14 +99,23 @@ function buildSystemPrompt(businessName: string, rubro: string, rubroConfig: any
   if (rubro === "Comida") {
     rubroPrompt = `
 - Tu rubro es Restaurante / Delivery de Comida.
-- Horarios de cocina: ${rubroConfig.kitchen_hours || "No especificados"}.
+- Horarios de cocina y atención: ${rubroConfig.kitchen_hours || "No especificados"}.
 - Costo de envío: $${rubroConfig.delivery_cost || "0.00"}.
 - Zonas de envío admitidas: ${rubroConfig.shipping_zones || "Todas"}.
 - Tiempo estimado de entrega: ${rubroConfig.estimated_time || "A convenir"}.
 - Datos bancarios para transferencia: Alias: ${rubroConfig.bank_details?.alias || "N/A"}, CBU: ${rubroConfig.bank_details?.cbu || "N/A"}, Titular: ${rubroConfig.bank_details?.titular || "N/A"}.
 
+REGLAS DE HORARIO DE ATENCIÓN (CRÍTICO):
+- La fecha y hora actual local del negocio es: **${localTimeStr}**.
+- Compara siempre la hora actual con el horario de cocina (${rubroConfig.kitchen_hours}). Si el cliente escribe FUERA del horario de cocina (por ejemplo, de madrugada o en días no laborables), **debes informarle con extrema amabilidad que la cocina está cerrada en este momento**, detallarle nuestros horarios de atención, y aclararle que no podemos prepararle ni despacharle pedidos ahora. Ofrécele la opción de dejar anotada y programada su comanda para cuando abramos en el próximo turno, o permítele hacer consultas sobre el menú, pero adviértele con total claridad que no estamos cocinando. ¡NUNCA digas que estamos atendiendo si estamos fuera de horario!
+
+REGLAS DE PRESENTACIÓN DEL MENÚ (EVITAR PAREDES DE TEXTO):
+- El catálogo de productos completo está a tu disposición en el contexto, pero **NUNCA vuelques ni imprimas la lista completa de productos ni sus precios de golpe** al cliente, ya que en WhatsApp es abrumador y antiestético.
+- En su lugar, cuando te saluden o te pregunten qué hay para comer, **presenta únicamente las categorías principales** (por ejemplo: Platos del día, Tartas, Pizzas, Sándwiches, etc.), pregúntale qué tipo de comida le apetece hoy, asesóralo cordialmente y recomiéndale de forma sugerente 1 o 2 platos destacados o promociones.
+- Solo debes listar los productos detallados con sus precios si el cliente te pregunta específicamente por una categoría concreta (ej. "¿qué pizzas tenés?") o por un producto en particular (ej. "¿cuánto sale el sándwich común?"). Responde de forma muy concisa mostrando únicamente lo solicitado.
+
 FLUJO ESPECÍFICO DE PEDIDO DE COMIDA:
-1. Saluda cordialmente e invita al cliente a ver el menú (lista de productos).
+1. Saluda cordialmente, preséntate, asesora al cliente recomendando alguna especialidad o categoría y pregúntale qué le gustaría ordenar hoy.
 2. Pregunta qué desea ordenar. Agrega los productos solicitados al carrito.
 3. Cuando el cliente diga que finalizó, pídele su dirección completa de envío y calcula el total de la compra (Suma total de ítems + Costo de envío).
 4. Pregunta cómo desea pagar (Efectivo o Transferencia).
@@ -268,7 +277,7 @@ async function transcribeAudio(mediaId: string, waToken: string): Promise<string
     }]
   }
 
-  const geminiData = await callGeminiWithFallback(transcriptionPayload, GEMINI_API_KEY, 5000)
+  const geminiData = await callGeminiWithFallback(transcriptionPayload, GEMINI_API_KEY, 12000)
   const transcript = geminiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ""
   return transcript
 }
@@ -673,8 +682,18 @@ serve(async (req) => {
 
         const chatHistory = rawHistory ? [...rawHistory].reverse() : []
 
+        // Calcular hora local de Argentina (UTC-3) de forma manual y robusta.
+        // NO usamos toLocaleString con timeZone nombrado porque el soporte de Deno
+        // para zonas horarias puede ser inconsistente según la versión del runtime.
+        const nowUtc = new Date()
+        const argOffset = -3 * 60 * 60 * 1000 // UTC-3 fijo (Argentina no tiene horario de verano)
+        const argNow = new Date(nowUtc.getTime() + argOffset)
+        const dayNames = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"]
+        const monthNames = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+        const localTimeStr = `${dayNames[argNow.getUTCDay()]}, ${argNow.getUTCDate()} de ${monthNames[argNow.getUTCMonth()]} de ${argNow.getUTCFullYear()}, ${String(argNow.getUTCHours()).padStart(2, "0")}:${String(argNow.getUTCMinutes()).padStart(2, "0")} hs (UTC-3 Argentina)`
+
         // 7. Construir System Prompt dinámico
-        const systemPrompt = buildSystemPrompt(business.name, business.rubro, rubroConfig, activeProducts)
+        const systemPrompt = buildSystemPrompt(business.name, business.rubro, rubroConfig, activeProducts, localTimeStr)
 
         // Formatear el historial en la estructura de roles de la API de Gemini
         const contents = chatHistory.map(h => ({
@@ -698,7 +717,7 @@ serve(async (req) => {
           }
 
           // Usar fallback automático entre modelos si el principal está saturado
-          const data = await callGeminiWithFallback(payload, GEMINI_API_KEY, 5000)
+          const data = await callGeminiWithFallback(payload, GEMINI_API_KEY, 15000)
           return data.candidates?.[0]?.content?.parts?.[0]?.text || ""
         }
 
