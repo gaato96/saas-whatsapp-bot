@@ -720,7 +720,7 @@ serve(async (req) => {
         }
 
         // Evaluar si la IA generó una etiqueta de orden cerrada
-        const orderJsonRegex = /\[ORDER_JSON:\s*({[\s\S]*?})\s*\]/
+        const orderJsonRegex = /\[ORDER_JSON:\s*({[\s\S]*})\s*\]/
         const match = userFacingMessage.match(orderJsonRegex)
         if (match) {
           try {

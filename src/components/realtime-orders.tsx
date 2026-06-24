@@ -223,7 +223,16 @@ export function RealtimeOrders({ businessId, initialOrders }: RealtimeOrdersProp
       {/* Grid del Kanban */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-start">
         {STATUS_COLUMNS.map((col) => {
-          const colOrders = orders.filter((o) => o.status === col.key)
+          const colOrders = orders.filter((o) => {
+            if (o.status !== col.key) return false
+            // Si es completado, solo mostrar si se creó en las últimas 12 horas (manteniendo la vista limpia por turno/día)
+            if (col.key === 'completed') {
+              const orderTime = new Date(o.created_at).getTime()
+              const twelveHoursAgo = Date.now() - 12 * 60 * 60 * 1000
+              return orderTime >= twelveHoursAgo
+            }
+            return true
+          })
           
           return (
             <div key={col.key} className="border border-zinc-900 bg-zinc-950/60 rounded-2xl flex flex-col shadow-sm">

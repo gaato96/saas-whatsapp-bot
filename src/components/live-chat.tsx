@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Archive, Trash2, Sparkles, X, ArchiveRestore, RefreshCw } from 'lucide-react'
+import { Archive, Trash2, Sparkles, X, ArchiveRestore, RefreshCw, CheckCircle } from 'lucide-react'
 
 interface Session {
   id: string
@@ -425,9 +425,9 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
     }
   }
 
-  // Eliminar conversación completa
+  // Cerrar y limpiar conversación
   const handleDeleteChat = async (sessionId: string) => {
-    if (!confirm('¿Estás seguro de que deseas eliminar esta conversación por completo? Esto borrará permanentemente todo el historial de mensajes.')) {
+    if (!confirm('¿Estás seguro de que deseas cerrar esta conversación? El historial de chat se limpiará y, si el cliente vuelve a escribir, la conversación e IA iniciarán un nuevo pedido desde cero.')) {
       return
     }
 
@@ -655,10 +655,11 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
 
                 <button
                   onClick={() => handleDeleteChat(currentSession.id)}
-                  title="Eliminar Conversación"
-                  className="rounded-lg border border-red-950 bg-red-950/20 p-2 text-red-400 hover:text-red-350 hover:bg-red-950/40 transition-all cursor-pointer"
+                  title="Cerrar Conversación (Finalizar y reiniciar chat)"
+                  className="rounded-lg border border-emerald-900/30 bg-emerald-950/10 px-3.5 py-2 text-emerald-400 hover:text-emerald-350 hover:bg-emerald-950/30 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold shadow-sm"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>Cerrar Conversación</span>
                 </button>
 
                 <button
