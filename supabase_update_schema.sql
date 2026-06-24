@@ -41,3 +41,102 @@ BEGIN
   END IF;
 END
 $$;
+
+-- 5. Agregar soporte para imágenes y documentos en el historial de chats
+ALTER TABLE public.chat_history ADD COLUMN IF NOT EXISTS media_url text;
+ALTER TABLE public.chat_history ADD COLUMN IF NOT EXISTS media_type text;
+
+-- 6. Modificar la función process_automatic_checkout para omitir stock en rubro 'Comida'
+CREATE OR REPLACE FUNCTION public.process_automatic_checkout(
+  p_business_id uuid,
+  p_customer_phone text,
+  p_payment_method payment_method_type,
+  p_total numeric,
+  p_items jsonb
+) RETURNS jsonb AS $$
+DECLARE
+  v_order_id uuid;
+  v_item json;
+  v_product_id uuid;
+  v_qty integer;
+  v_current_stock integer;
+  v_product_name text;
+  v_rubro text;
+BEGIN
+  -- Obtener el rubro del negocio
+  SELECT rubro::text INTO v_rubro FROM public.businesses WHERE id = p_business_id;
+
+  -- 1. Verificar existencia de todos los ítems (y stock si no es rubro 'Comida')
+  FOR v_item IN SELECT * FROM jsonb_array_elements(p_items) LOOP
+    v_product_id := (v_item->>'product_id')::uuid;
+    v_qty := (v_item->>'qty')::integer;
+    
+    SELECT name, stock INTO v_product_name, v_current_stock 
+    FROM public.products_services 
+    WHERE id = v_product_id AND business_id = p_business_id;
+    
+    IF v_current_stock IS NULL THEN
+      RETURN jsonb_build_object('success', false, 'error', 'Producto no encontrado en el catálogo: ' || (v_item->>'name'));
+    END IF;
+    
+    -- Solo verificar stock si NO es rubro Comida
+    IF v_rubro <> 'Comida' THEN
+      IF v_current_stock < v_qty THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Stock insuficiente para "' || v_product_name || '". Stock disponible: ' || v_current_stock);
+      END IF;
+    END IF;
+  END LOOP;
+
+  -- 2. Restar stock (solo si NO es rubro Comida)
+  IF v_rubro <> 'Comida' THEN
+    FOR v_item IN SELECT * FROM jsonb_array_elements(p_items) LOOP
+      v_product_id := (v_item->>'product_id')::uuid;
+      v_qty := (v_item->>'qty')::integer;
+      
+      UPDATE public.products_services
+      SET stock = stock - v_qty
+      WHERE id = v_product_id;
+    END LOOP;
+  END IF;
+
+  -- 3. Crear el pedido
+  INSERT INTO public.orders_bookings (
+    business_id,
+    customer_phone,
+    status,
+    payment_method,
+    total,
+    items
+  ) VALUES (
+    p_business_id,
+    p_customer_phone,
+    CASE WHEN p_payment_method = 'transfer' THEN 'pending_payment'::order_status ELSE 'confirmed'::order_status END,
+    p_payment_method,
+    p_total,
+    p_items
+  ) RETURNING id INTO v_order_id;
+
+  RETURN jsonb_build_object('success', true, 'order_id', v_order_id);
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object('success', false, 'error', SQLERRM);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 7. Asegurar que las tablas de chat y sesiones estén en la publicación de Supabase Realtime
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'chat_history'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_history;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'chat_sessions'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_sessions;
+  END IF;
+END
+$$;

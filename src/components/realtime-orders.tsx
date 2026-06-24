@@ -300,7 +300,7 @@ export function RealtimeOrders({ businessId, initialOrders }: RealtimeOrdersProp
                               onClick={() => handleUpdateStatus(order.id, 'confirmed')}
                               className="px-2.5 py-1 text-[9px] font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-all shadow-md shadow-blue-600/10"
                             >
-                              Validar Pago
+                              Confirmar Pago
                             </button>
                           </>
                         )}

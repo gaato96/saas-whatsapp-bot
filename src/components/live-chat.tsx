@@ -18,6 +18,8 @@ interface Message {
   session_id: string
   sender: 'bot' | 'customer' | 'agent'
   message_text: string
+  media_url?: string | null
+  media_type?: string | null
   timestamp: string
 }
 
@@ -309,6 +311,49 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId, supabase]) // ← selectedSessionId ELIMINADO a propósito: usamos el ref
+
+  // Polling automático cada 5 segundos como fallback de tiempo real
+  useEffect(() => {
+    if (!dbConnected || businessId === 'demo-business-id') return
+
+    const pollInterval = setInterval(async () => {
+      // 1. Recargar lista de sesiones
+      const { data: sessionsData } = await supabase
+        .from('chat_sessions')
+        .select('*')
+        .order('last_interaction', { ascending: false })
+      
+      if (sessionsData) {
+        setSessions(prev => {
+          if (JSON.stringify(prev) !== JSON.stringify(sessionsData)) {
+            return sessionsData
+          }
+          return prev
+        })
+      }
+
+      // 2. Recargar mensajes de la sesión activa
+      const currentSessionId = selectedSessionIdRef.current
+      if (currentSessionId) {
+        const { data: messagesData } = await supabase
+          .from('chat_history')
+          .select('*')
+          .eq('session_id', currentSessionId)
+          .order('timestamp', { ascending: true })
+        
+        if (messagesData) {
+          setMessages(prev => {
+            if (JSON.stringify(prev) !== JSON.stringify(messagesData)) {
+              return messagesData
+            }
+            return prev
+          })
+        }
+      }
+    }, 5000)
+
+    return () => clearInterval(pollInterval)
+  }, [dbConnected, businessId, supabase])
 
   // Cambiar estado del takeover (Bot vs Humano)
   const handleToggleTakeover = async (session: Session) => {
@@ -669,7 +714,38 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
                           </span>
                         </div>
                         <div className={`p-3 rounded-2xl text-xs max-w-md whitespace-pre-wrap leading-relaxed ${bubbleStyle}`}>
-                          {m.message_text}
+                          {m.media_url && m.media_type?.startsWith('image/') && (
+                            <div className="mb-2 rounded-lg overflow-hidden border border-zinc-800 bg-zinc-950/20 max-w-full">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={m.media_url}
+                                alt="Adjunto"
+                                className="max-w-xs h-auto max-h-48 object-contain cursor-zoom-in rounded-lg hover:opacity-90 transition-opacity"
+                                onClick={() => window.open(m.media_url || undefined, '_blank')}
+                              />
+                            </div>
+                          )}
+                          {m.media_url && !m.media_type?.startsWith('image/') && (
+                            <div className="mb-2 p-3 rounded-xl border border-zinc-800 bg-zinc-950 flex items-center gap-3">
+                              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-900 border border-zinc-800 font-extrabold text-[10px] text-zinc-400 uppercase">
+                                {m.media_type?.split('/')[1] || 'DOC'}
+                              </span>
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-[10px] text-zinc-500 font-semibold truncate max-w-[180px]">
+                                  Archivo adjunto
+                                </span>
+                                <a
+                                  href={m.media_url || undefined}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-emerald-400 font-bold hover:underline flex items-center gap-1 text-[11px]"
+                                >
+                                  📄 Ver / Descargar Documento
+                                </a>
+                              </div>
+                            </div>
+                          )}
+                          <div>{m.message_text}</div>
                         </div>
                       </div>
                     )

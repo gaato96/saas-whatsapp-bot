@@ -108,12 +108,11 @@ function buildSystemPrompt(businessName: string, rubro: string, rubroConfig: any
 FLUJO ESPECÍFICO DE PEDIDO DE COMIDA:
 1. Saluda cordialmente e invita al cliente a ver el menú (lista de productos).
 2. Pregunta qué desea ordenar. Agrega los productos solicitados al carrito.
-3. IMPORTANTE: Valida que la cantidad solicitada sea menor o igual al "Stock Disponible". Si no hay suficiente stock, advierte al usuario inmediatamente.
-4. Cuando el cliente diga que finalizó, pídele su dirección completa de envío y calcula el total de la compra (Suma total de ítems + Costo de envío).
-5. Pregunta cómo desea pagar (Efectivo o Transferencia).
-6. Si elige Transferencia: Muestra los datos de transferencia bancaria y pídele que por favor te envíe una captura del comprobante por este chat. Deja el estado como pendiente de verificación.
-7. Si elige Efectivo: Infórmale que pagará al recibir el pedido.
-8. Una vez y SOLO cuando tengas: productos (con IDs del catálogo), cantidades, dirección de entrega y método de pago, debes confirmar el pedido e imprimir obligatoriamente la etiqueta de cierre de orden en una nueva línea al final del mensaje (sin formato adicional):
+3. Cuando el cliente diga que finalizó, pídele su dirección completa de envío y calcula el total de la compra (Suma total de ítems + Costo de envío).
+4. Pregunta cómo desea pagar (Efectivo o Transferencia).
+5. Si elige Transferencia: Muestra los datos de transferencia bancaria y pídele que por favor te envíe una captura del comprobante por este chat. E INMEDIATAMENTE imprime la etiqueta de cierre de orden [ORDER_JSON: ...] al final de tu respuesta para registrar el pedido como "Pendiente de Pago".
+6. Si elige Efectivo: Infórmale que pagará al recibir el pedido e imprime la etiqueta de cierre de orden [ORDER_JSON: ...] al final de tu respuesta.
+7. La etiqueta [ORDER_JSON: ...] debe ser el único medio por el cual registramos el pedido en nuestro sistema. Debe imprimirse en una sola línea al final del mensaje (sin formato adicional):
    [ORDER_JSON: {"items": [{"product_id": "UUID", "name": "Nombre", "qty": 1, "price": 10.50}], "payment_method": "transfer" o "cash", "total": Total}]
 `;
   } else if (rubro === "Peluquería") {
@@ -415,10 +414,12 @@ serve(async (req) => {
 
         const customerPhone = messageObj.from
         const phoneId = value.metadata?.phone_number_id // ID del teléfono Meta receptor
-        const messageType = messageObj.type // "text", "audio", "image", etc.
+        const messageType = messageObj.type // "text", "audio", "image", "document", etc.
 
         let messageText = ""
         let isAudioTranscription = false
+        let mediaUrlToDownload = ""
+        let mediaMimeType = ""
 
         if (messageType === "text") {
           messageText = messageObj.text?.body?.trim() || ""
@@ -429,8 +430,24 @@ serve(async (req) => {
           // Marcamos como pendiente; el token de WhatsApp se obtiene después de buscar el negocio
           messageText = `__AUDIO_PENDING__:${mediaId}`
           isAudioTranscription = true
+        } else if (messageType === "image") {
+          const mediaId = messageObj.image?.id
+          const mimeType = messageObj.image?.mime_type || "image/jpeg"
+          const caption = messageObj.image?.caption || ""
+          messageText = caption ? `[Imagen]: ${caption}` : "[Comprobante de pago (Imagen)]"
+          console.log(`Mensaje de imagen recibido de ${customerPhone}. Media ID: ${mediaId}, Mime: ${mimeType}`)
+          mediaUrlToDownload = `__DOWNLOAD_PENDING__:${mediaId}`
+          mediaMimeType = mimeType
+        } else if (messageType === "document") {
+          const mediaId = messageObj.document?.id
+          const mimeType = messageObj.document?.mime_type || "application/pdf"
+          const filename = messageObj.document?.filename || "comprobante.pdf"
+          messageText = `[Documento / Comprobante]: ${filename}`
+          console.log(`Mensaje de documento recibido de ${customerPhone}. Media ID: ${mediaId}, Mime: ${mimeType}`)
+          mediaUrlToDownload = `__DOWNLOAD_PENDING__:${mediaId}`
+          mediaMimeType = mimeType
         } else {
-          // Ignorar otros tipos (imagen, video, documento, sticker, etc.)
+          // Ignorar otros tipos (video, sticker, etc.)
           console.log(`Tipo de mensaje no soportado: "${messageType}". Ignorando.`)
           return
         }
@@ -563,12 +580,80 @@ serve(async (req) => {
           }
         }
 
+        // 5c. Si el mensaje es una imagen o documento pendiente de descarga, procesarlo
+        let finalMediaUrl = null
+        if (mediaUrlToDownload && mediaUrlToDownload.startsWith("__DOWNLOAD_PENDING__:")) {
+          const mediaId = mediaUrlToDownload.replace("__DOWNLOAD_PENDING__:", "")
+          const waToken = business.whatsapp_config?.access_token
+
+          if (waToken) {
+            try {
+              console.log(`Descargando media de Meta... Media ID: ${mediaId}, Mime: ${mediaMimeType}`)
+              // 1. Obtener URL de descarga temporal
+              const mediaInfoRes = await fetch(`https://graph.facebook.com/v22.0/${mediaId}`, {
+                headers: { Authorization: `Bearer ${waToken}` },
+              })
+              if (mediaInfoRes.ok) {
+                const mediaInfo = await mediaInfoRes.json()
+                const downloadUrl = mediaInfo.url
+                
+                // 2. Descargar archivo
+                const fileRes = await fetch(downloadUrl, {
+                  headers: { Authorization: `Bearer ${waToken}` },
+                })
+                if (fileRes.ok) {
+                  const arrayBuffer = await fileRes.arrayBuffer()
+                  const fileExt = mediaMimeType.split("/")[1]?.split(";")[0] || "bin"
+                  const fileName = `${session.id}/${mediaId}.${fileExt}`
+
+                  // 3. Crear bucket si no existe
+                  try {
+                    await supabaseAdmin.storage.createBucket("chat-media", { public: true })
+                  } catch (_) {
+                    // Ignorar si ya existe
+                  }
+
+                  // 4. Subir a Supabase Storage
+                  const { error: uploadErr } = await supabaseAdmin.storage
+                    .from("chat-media")
+                    .upload(fileName, arrayBuffer, {
+                      contentType: mediaMimeType,
+                      upsert: true
+                    })
+
+                  if (!uploadErr) {
+                    // 5. Obtener public URL
+                    const { data: { publicUrl } } = supabaseAdmin.storage
+                      .from("chat-media")
+                      .getPublicUrl(fileName)
+
+                    finalMediaUrl = publicUrl
+                    console.log(`Media subida con éxito a Supabase Storage: ${finalMediaUrl}`)
+                  } else {
+                    console.error("Error al subir archivo a Supabase Storage:", uploadErr)
+                  }
+                } else {
+                  console.error("Error al descargar archivo de Meta:", await fileRes.text())
+                }
+              } else {
+                console.error("Error al obtener info de media de Meta:", await mediaInfoRes.text())
+              }
+            } catch (mediaErr) {
+              console.error("Fallo descargando/procesando media de Meta:", mediaErr)
+            }
+          } else {
+            console.error("No hay access_token configurado para descargar media.")
+          }
+        }
+
         // 5b. Guardar el mensaje entrante del cliente en el historial
         const storedText = isAudioTranscription ? `🎙️ [Mensaje de voz transcripto]: ${messageText}` : messageText
         await supabaseAdmin.from("chat_history").insert({
           session_id: session.id,
           sender: "customer",
           message_text: storedText,
+          media_url: finalMediaUrl,
+          media_type: finalMediaUrl ? mediaMimeType : null,
           timestamp: new Date().toISOString()
         })
 
@@ -635,7 +720,7 @@ serve(async (req) => {
         }
 
         // Evaluar si la IA generó una etiqueta de orden cerrada
-        const orderJsonRegex = /\[ORDER_JSON:\s*({.*?})\]/s
+        const orderJsonRegex = /\[ORDER_JSON:\s*({[\s\S]*?})\s*\]/
         const match = userFacingMessage.match(orderJsonRegex)
         if (match) {
           try {
@@ -652,37 +737,62 @@ serve(async (req) => {
         if (orderToCreate) {
           console.log("Ejecutando proceso de checkout automático en Supabase...")
           
-          // Llamada a la función PostgreSQL process_automatic_checkout
-          const { data: checkoutResult, error: rpcErr } = await supabaseAdmin.rpc(
-            "process_automatic_checkout",
-            {
-              p_business_id: business.id,
-              p_customer_phone: customerPhone,
-              p_payment_method: orderToCreate.payment_method,
-              p_total: orderToCreate.total,
-              p_items: orderToCreate.items
+          // Verificar duplicación de orden en los últimos 2 minutos
+          const { data: recentOrders } = await supabaseAdmin
+            .from("orders_bookings")
+            .select("id, items, total")
+            .eq("business_id", business.id)
+            .eq("customer_phone", customerPhone)
+            .order("created_at", { ascending: false })
+            .limit(1)
+
+          let isDuplicateOrder = false
+          if (recentOrders && recentOrders.length > 0) {
+            const lastOrder = recentOrders[0]
+            if (
+              JSON.stringify(lastOrder.items) === JSON.stringify(orderToCreate.items) &&
+              Number(lastOrder.total) === Number(orderToCreate.total)
+            ) {
+              isDuplicateOrder = true
+              console.log(`[DEDUPLICACIÓN] Se ignoró la creación de orden duplicada ya existente (ID: ${lastOrder.id}).`)
             }
-          )
+          }
 
-          if (rpcErr || !checkoutResult?.success) {
-            const errorMsg = rpcErr?.message || checkoutResult?.error || "Error al verificar stock o crear el pedido."
-            console.warn(`[AUTOCORRECCIÓN] Fallo de stock detectado: ${errorMsg}`)
-
-            // Inyectar el fallo en el historial del chat y forzar una re-evaluación con Gemini
-            const correctionMessage = `SISTEMA: El pedido no se pudo procesar debido a este error: "${errorMsg}". Informa amablemente al usuario de esta situación para que cambie la cantidad o el producto. Tu catálogo actual refleja el stock real.`
-            
-            const correctedContents = [
-              ...contents,
-              { role: "model", parts: [{ text: aiResponse }] },
-              { role: "user", parts: [{ text: correctionMessage }] }
-            ]
-
-            console.log("Invocando re-evaluación en Gemini por error de stock...")
-            const correctedAiResponse = await callGemini(correctedContents)
-            userFacingMessage = correctedAiResponse.replace(orderJsonRegex, "").replace("[HUMAN_REQUIRED]", "").trim()
-            console.log("Respuesta corregida de Gemini:", userFacingMessage)
+          if (isDuplicateOrder) {
+            console.log("Saltando llamada a process_automatic_checkout por orden duplicada.")
           } else {
-            console.log(`Pedido creado exitosamente con ID: ${checkoutResult.order_id}`)
+            // Llamada a la función PostgreSQL process_automatic_checkout
+            const { data: checkoutResult, error: rpcErr } = await supabaseAdmin.rpc(
+              "process_automatic_checkout",
+              {
+                p_business_id: business.id,
+                p_customer_phone: customerPhone,
+                p_payment_method: orderToCreate.payment_method,
+                p_total: orderToCreate.total,
+                p_items: orderToCreate.items
+              }
+            )
+
+            if (rpcErr || !checkoutResult?.success) {
+              const errorMsg = rpcErr?.message || checkoutResult?.error || "Error al verificar stock o crear el pedido."
+              console.warn(`[AUTOCORRECCIÓN] Fallo de stock detectado: ${errorMsg}`)
+
+              // Inyectar el fallo en el historial del chat y forzar una re-evaluación con Gemini
+              const correctionMessage = `SISTEMA: El pedido no se pudo procesar debido a este error: "${errorMsg}". Informa amablemente al usuario de esta situación para que cambie la cantidad o el producto. Tu catálogo actual refleja el stock real.`
+              
+              const correctedContents = [
+                ...contents,
+                { role: "model", parts: [{ text: aiResponse }] },
+                { role: "user", parts: [{ text: correctionMessage }] }
+              ]
+
+              console.log("Invocando re-evaluación en Gemini por error de stock...")
+              const correctedAiResponse = await callGemini(correctedContents)
+              userFacingMessage = correctedAiResponse.replace(orderJsonRegex, "").replace("[HUMAN_REQUIRED]", "").trim()
+              console.log("Respuesta corregida de Gemini:", userFacingMessage)
+            } else {
+              console.log(`Pedido creado exitosamente con ID: ${checkoutResult.order_id}`)
+            }
           }
         }
 
