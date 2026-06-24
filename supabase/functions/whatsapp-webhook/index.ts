@@ -85,13 +85,13 @@ const corsHeaders = {
 
 /**
  * 1. CONSTRUCTOR DINÁMICO DEL SYSTEM PROMPT PARA GEMINI
- * Inyecta las reglas del rubro, configuración del negocio y catálogo con stock.
- */
-function buildSystemPrompt(businessName: string, rubro: string, rubroConfig: any, products: any[], localTimeStr: string) {
-  // Serializar el catálogo de productos con stock actual (se omite para el rubro Comida)
+ * Inyecta las reglas del rubro, configuración del negocio y catálo  // Determinar si el rubro requiere control de stock en el prompt
+  const hasStockControl = ["E-commerce", "Personalizado"].includes(rubro);
+
+  // Serializar el catálogo de productos con stock actual
   const catalogText = products.length > 0
     ? products.map(p => {
-        const stockStr = rubro === "Comida" ? "" : ` | Stock Disponible: ${p.stock}`;
+        const stockStr = hasStockControl ? ` | Stock Disponible: ${p.stock}` : "";
         return `- ID: ${p.id} | Nombre: ${p.name} | Descripción: ${p.description || "Sin descripción"} | Precio: $${p.price}${stockStr}`;
       }).join("\n")
     : "No hay productos o servicios registrados en este momento.";
@@ -137,40 +137,140 @@ FLUJO ESPECÍFICO DE PEDIDO DE COMIDA:
 - Duración promedio del servicio: ${rubroConfig.average_duration || "30"} minutos.
 - Política de cancelación: ${rubroConfig.cancellation_policy || "No especificada"}.
 
-FLUJO ESPECÍFICO DE TURNO:
-1. Saluda y muestra los servicios disponibles con sus precios correspondientes.
-2. Pídele al cliente que elija un servicio y el especialista de su preferencia.
-3. Pregúntale la fecha y el horario deseados de forma conversacional.
-4. Al confirmar los datos, debes cerrar la reserva. Los turnos también se registran como un ítem de servicio. Genera la etiqueta final de confirmación:
-   [ORDER_JSON: {"items": [{"product_id": "UUID_DEL_SERVICIO", "name": "Servicio con Profesional y Horario", "qty": 1, "price": Precio}], "payment_method": "cash", "total": Total}]
-`;
-  } else if (rubro === "Agencia") {
-    rubroPrompt = `
-- Tu rubro es Agencia de Servicios (por ejemplo: marketing, desarrollo, automatizaciones, consultoría).
-- Especialidades/Servicios de la Agencia: ${rubroConfig?.agency_specialties || "No especificadas"}.
-- Tipo de Agencia: ${rubroConfig?.agency_type || "Servicios profesionales"}.
-- Tipo de reunión: ${rubroConfig?.meeting_type || "virtual"}.
-- Link de reserva (Calendly/Google Calendar/etc.): ${rubroConfig?.booking_link || "No configurado"}.
+DISPONIBILIDAD Y STOCK:
+- El stock NO se gestiona en la conversación. Los servicios siempre están disponibles. NUNCA le digas al cliente que no hay stock disponible.
 
-FLUJO ESPECÍFICO DE RESERVAS/CONTACTO:
-1. Saluda cordialmente y responde dudas sobre los servicios y especialidades de la agencia.
-2. Indaga brevemente y de forma conversacional sobre las necesidades del cliente.
-3. Invita al cliente a agendar una llamada/videollamada de asesoramiento/consulta utilizando el link de reserva provisto.
-4. IMPORTANTE: Comparte el siguiente enlace de reserva de forma clara y atractiva para que el cliente pueda programar su reunión: ${rubroConfig?.booking_link || "Link no disponible"}.
-5. Si no hay catálogo de servicios registrados, tu prioridad absoluta es guiar al cliente para que agende mediante el Link de Reserva.
+FLUJO ESPECÍFICO DE TURNO:
+1. Saluda cordialmente y muestra los servicios disponibles en el catálogo con sus precios.
+2. Ayuda al cliente a elegir un servicio y el estilista de su preferencia.
+3. Pregúntale la fecha y el horario deseados de forma conversacional.
+4. Una vez acordados los detalles, debes registrar la reserva imprimiendo la etiqueta final de confirmación en una sola línea al final de tu respuesta:
+   [ORDER_JSON: {"items": [{"product_id": "UUID_DEL_SERVICIO", "name": "Servicio con Especialista y Horario", "qty": 1, "price": Precio}], "payment_method": "cash", "total": Total}]
+`;
+  } else if (rubro === "Gym") {
+    rubroPrompt = `
+- Tu rubro es Gimnasio / Centro de Fitness.
+- Clases/Actividades y Planes disponibles: Consultas sobre pases o clases dirigidas.
+- Horarios de atención del local: ${rubroConfig.gym_hours || "No especificados"}.
+
+DISPONIBILIDAD Y STOCK:
+- El stock NO se gestiona en la conversación. Los planes y membresías siempre están disponibles.
+
+FLUJO ESPECÍFICO DE INSCRIPCIÓN / RESERVA:
+1. Saluda con entusiasmo y presenta los planes o pases disponibles del catálogo.
+2. Ayuda al cliente a resolver dudas sobre horarios, clases y precios.
+3. Si el usuario desea inscribirse o reservar una clase, pídele su Nombre Completo, Teléfono y la Fecha de inicio/asistencia.
+4. Confirma la inscripción imprimiendo la etiqueta final de confirmación en una sola línea al final de tu respuesta:
+   [ORDER_JSON: {"items": [{"product_id": "UUID_DEL_PLAN", "name": "Inscripción Plan de Gimnasio", "qty": 1, "price": Precio}], "payment_method": "transfer" o "cash", "total": Total}]
+`;
+  } else if (rubro === "Médico") {
+    rubroPrompt = `
+- Tu rubro es Médico / Consultorio Clínico / Odontología.
+- Especialistas disponibles: ${rubroConfig.doctors || "Médicos del staff"}.
+- Obras Sociales/Prepagas aceptadas: ${rubroConfig.health_insurances || "Consulta previa"}.
+
+DISPONIBILIDAD Y STOCK:
+- El stock NO se gestiona en la conversación. Las consultas médicas siempre están disponibles para agendar.
+
+FLUJO ESPECÍFICO DE AGENDAMIENTO DE CONSULTA:
+1. Saluda con cordialidad y empatía y consulta la especialidad o profesional requerido.
+2. Pídele al paciente su Nombre Completo, DNI, Teléfono y si cuenta con alguna de las Obras Sociales / Prepagas aceptadas.
+3. Coordina de manera conversacional la fecha y la hora para el turno.
+4. Confirma el turno asignado imprimiendo la etiqueta de confirmación en una sola línea al final de tu respuesta:
+   [ORDER_JSON: {"items": [{"product_id": "UUID_DE_CONSULTA", "name": "Turno Médico con Profesional y Horario", "qty": 1, "price": Precio}], "payment_method": "cash", "total": Total}]
+`;
+  } else if (rubro === "Hotel") {
+    rubroPrompt = `
+- Tu rubro es Hotel / Hospedaje / Cabañas / Alojamiento.
+- Servicios incluidos: ${rubroConfig.included_services || "No especificados"}.
+- Políticas de ingreso: Check-in desde las 14:00 hs, Check-out hasta las 10:00 hs.
+
+DISPONIBILIDAD Y STOCK:
+- El stock de habitaciones/cabañas NO se gestiona en la conversación de forma numérica tradicional.
+
+FLUJO ESPECÍFICO DE RESERVAS:
+1. Saluda cordialmente y presenta los tipos de hospedaje/cabañas de nuestro catálogo.
+2. Pregunta al cliente las Fechas de Check-in y Check-out y el Número total de huéspedes (especificando si hay menores).
+3. Solicita el Nombre Completo de quien realiza la reserva.
+4. Calcula el total aproximado del hospedaje y confirma la reserva imprimiendo la etiqueta en una sola línea al final de tu respuesta:
+   [ORDER_JSON: {"items": [{"product_id": "UUID_DEL_ALOJAMIENTO", "name": "Reserva de Alojamiento", "qty": 1, "price": Precio}], "payment_method": "transfer" o "cash", "total": Total}]
+`;
+  } else if (rubro === "Cursos") {
+    rubroPrompt = `
+- Tu rubro es Academia / Cursos / Educación.
+- Modalidad y Duración: ${rubroConfig.academy_details || "A consultar"}.
+
+DISPONIBILIDAD Y STOCK:
+- El stock NO se gestiona en la conversación. Los cursos y programas formativos siempre tienen vacantes libres.
+
+FLUJO ESPECÍFICO DE MATRICULACIÓN:
+1. Saluda de manera profesional y responde dudas sobre el temario, la duración o las clases del catálogo.
+2. Pídele al estudiante su Nombre Completo, Correo Electrónico y Teléfono.
+3. Detalla los precios de matrícula y cuotas si aplica.
+4. Genera la matrícula imprimiendo la etiqueta de confirmación en una sola línea al final de tu respuesta:
+   [ORDER_JSON: {"items": [{"product_id": "UUID_DEL_CURSO", "name": "Matrícula de Curso", "qty": 1, "price": Precio}], "payment_method": "transfer" o "cash", "total": Total}]
+`;
+  } else if (rubro === "Servicios" || rubro === "Agencia") {
+    rubroPrompt = `
+- Tu rubro es Agencia de Servicios / Consultoría / Servicios Profesionales.
+- Especialidades: ${rubroConfig.agency_specialties || "Asesoramiento profesional"}.
+- Link de reserva (Calendly/Google Calendar/etc.): ${rubroConfig.booking_link || "No configurado"}.
+
+DISPONIBILIDAD Y STOCK:
+- El stock NO se gestiona en la conversación.
+
+FLUJO ESPECÍFICO DE AGENDAMIENTO/CONTRATACIÓN:
+1. Saluda cordialmente, indaga brevemente sobre las necesidades de su negocio y responde dudas sobre los servicios del catálogo.
+2. Si el cliente desea coordinar una reunión de diagnóstico o cotización a medida, compártele el Link de Reserva para que elija fecha y hora.
+3. Si el cliente opta por contratar un abono o plan de servicios cerrado del catálogo directamente, solicita sus datos de facturación (Nombre/Razón Social, CUIT/DNI, Email).
+4. Registra la contratación imprimiendo la etiqueta al final de tu respuesta:
+   [ORDER_JSON: {"items": [{"product_id": "UUID_DEL_SERVICIO", "name": "Contratación de Servicio", "qty": 1, "price": Precio}], "payment_method": "transfer" o "cash", "total": Total}]
+`;
+  } else if (rubro === "Automotriz") {
+    rubroPrompt = `
+- Tu rubro es Automotriz / Taller Mecánico / Lavadero / Servicios Vehiculares.
+- Servicios vehiculares y tiempos de entrega: ${rubroConfig.auto_details || "A convenir"}.
+
+DISPONIBILIDAD Y STOCK:
+- El stock NO se gestiona en la conversación. Los turnos e inspecciones mecánicas siempre están disponibles.
+
+FLUJO ESPECÍFICO DE TURNOS DE TALLER:
+1. Saluda y consulta cuál es la falla del auto o el mantenimiento que desea realizar.
+2. Pídele al cliente la Marca, Modelo y Año del auto, junto con la Patente (Dominio) y Kilometraje aproximado.
+3. Coordina de forma amigable la fecha y la hora para que traiga el vehículo al local.
+4. Registra el turno imprimiendo la etiqueta de confirmación en una sola línea al final de tu respuesta:
+   [ORDER_JSON: {"items": [{"product_id": "UUID_DEL_SERVICIO", "name": "Turno Taller Patente Vehículo", "qty": 1, "price": Precio}], "payment_method": "cash", "total": Total}]
+`;
+  } else if (rubro === "E-commerce") {
+    rubroPrompt = `
+- Tu rubro es E-commerce / Venta de Productos Físicos.
+- Costo de envío y políticas: ${rubroConfig.shipping_cost || "A cotizar"}.
+
+DISPONIBILIDAD Y STOCK (MÁXIMA PRIORIDAD):
+- Debes respetar estrictamente el Stock Disponible que figura en el catálogo de productos.
+- Si el stock de un producto es 0, infórmale amablemente al cliente que el producto se encuentra momentáneamente agotado. NO le permitas agregarlo al carrito ni cierres órdenes con productos sin stock.
+
+FLUJO ESPECÍFICO DE VENTA ONLINE:
+1. Saluda cordialmente y responde preguntas sobre talles, colores, modelos y precios del catálogo.
+2. Agrega los productos solicitados al carrito de compra respetando las unidades en stock.
+3. Pídele su Dirección Completa de envío y calcula el total de la compra (Suma de productos + Envío).
+4. Ofrece medios de pago (Efectivo o Transferencia) y cierra el pedido imprimiendo la etiqueta en una sola línea al final de tu respuesta:
+   [ORDER_JSON: {"items": [{"product_id": "UUID", "name": "Nombre Producto", "qty": Cantidad, "price": Precio}], "payment_method": "transfer" o "cash", "total": Total}]
 `;
   } else {
-    // Rubro general, e-commerce, o personalizado
+    // Rubro Personalizado o Fallback
     rubroPrompt = `
 - Tu rubro comercial es: ${rubro}.
 - Configuración adicional: ${JSON.stringify(rubroConfig)}
 
+DISPONIBILIDAD Y STOCK:
+- Debes respetar el stock disponible indicado en el catálogo de productos para guiar las solicitudes del cliente.
+
 FLUJO GENERAL DE VENTA / ATENCIÓN:
 1. Responde dudas sobre los productos y servicios del catálogo.
 2. Si el usuario desea comprar o contratar, agrégalo al carrito conversacional respetando el stock disponible.
-3. Pídele su información de entrega o modalidad.
-4. Define el método de pago (Efectivo o Transferencia).
-5. Al concretar la venta, imprime la etiqueta al final en una nueva línea:
+3. Solicita la información de entrega o modalidad deseada.
+4. Define el método de pago y cierra la orden imprimiendo la etiqueta al final en una nueva línea:
    [ORDER_JSON: {"items": [{"product_id": "UUID", "name": "Nombre", "qty": 1, "price": 10.00}], "payment_method": "transfer" o "cash", "total": Total}]
 `;
   }
