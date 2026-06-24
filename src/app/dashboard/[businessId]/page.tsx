@@ -41,7 +41,7 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
 
     const { data } = await supabase
       .from('orders_bookings')
-      .select('id, business_id, customer_phone, status, payment_method, total, items, created_at')
+      .select('id, business_id, customer_phone, status, payment_method, payment_status, total, items, created_at')
       .eq('business_id', businessId)
       .order('created_at', { ascending: false })
 

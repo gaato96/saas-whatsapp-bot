@@ -47,6 +47,7 @@ ALTER TABLE public.chat_history ADD COLUMN IF NOT EXISTS media_url text;
 ALTER TABLE public.chat_history ADD COLUMN IF NOT EXISTS media_type text;
 
 -- 6. Modificar la función process_automatic_checkout para omitir stock en rubro 'Comida'
+-- y soportar payment_status en el INSERT del pedido
 CREATE OR REPLACE FUNCTION public.process_automatic_checkout(
   p_business_id uuid,
   p_customer_phone text,
@@ -62,6 +63,8 @@ DECLARE
   v_current_stock integer;
   v_product_name text;
   v_rubro text;
+  v_order_status order_status;
+  v_payment_status text;
 BEGIN
   -- Obtener el rubro del negocio
   SELECT rubro::text INTO v_rubro FROM public.businesses WHERE id = p_business_id;
@@ -99,19 +102,31 @@ BEGIN
     END LOOP;
   END IF;
 
-  -- 3. Crear el pedido
+  -- 3. Determinar estado y payment_status según método de pago
+  -- Transferencia → pending_payment + payment_status='pending'
+  -- Efectivo      → confirmed + payment_status='pending' (el dueño confirma cobro al entregar)
+  IF p_payment_method = 'transfer' THEN
+    v_order_status := 'pending_payment'::order_status;
+  ELSE
+    v_order_status := 'confirmed'::order_status;
+  END IF;
+  v_payment_status := 'pending';
+
+  -- 4. Crear el pedido con payment_status
   INSERT INTO public.orders_bookings (
     business_id,
     customer_phone,
     status,
     payment_method,
+    payment_status,
     total,
     items
   ) VALUES (
     p_business_id,
     p_customer_phone,
-    CASE WHEN p_payment_method = 'transfer' THEN 'pending_payment'::order_status ELSE 'confirmed'::order_status END,
+    v_order_status,
     p_payment_method,
+    v_payment_status,
     p_total,
     p_items
   ) RETURNING id INTO v_order_id;
@@ -140,3 +155,9 @@ BEGIN
   END IF;
 END
 $$;
+
+-- 8. Agregar columna payment_status a orders_bookings
+-- Efectivo → 'pending' hasta que el dueño confirme el cobro en la vista Completado
+-- Transferencia → 'pending' hasta que el dueño valide el comprobante recibido
+ALTER TABLE public.orders_bookings ADD COLUMN IF NOT EXISTS payment_status text DEFAULT 'pending';
+
