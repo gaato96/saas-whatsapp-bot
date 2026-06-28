@@ -84,8 +84,10 @@ const corsHeaders = {
 }
 
 /**
- * 1. CONSTRUCTOR DINÁMICO DEL SYSTEM PROMPT PARA GEMINI
- * Inyecta las reglas del rubro, configuración del negocio y catálo  // Determinar si el rubro requiere control de stock en el prompt
+ * Inyecta las reglas del rubro, configuración del negocio y catálogo con stock.
+ */
+function buildSystemPrompt(businessName: string, rubro: string, rubroConfig: any, products: any[], localTimeStr: string) {
+  // Determinar si el rubro requiere control de stock en el prompt
   const hasStockControl = ["E-commerce", "Personalizado"].includes(rubro);
 
   // Serializar el catálogo de productos con stock actual

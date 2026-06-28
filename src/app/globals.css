@@ -9,18 +9,20 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   
-  --color-zinc-950: #0b141a; /* WhatsApp dark primary bg */
-  --color-zinc-900: #111b21; /* WhatsApp dark secondary bg */
-  --color-zinc-800: #202c33; /* WhatsApp dark panel bg */
-  --color-zinc-850: #222e35; /* WhatsApp dark panel border/active */
+  /* === ZAPFLOW Dark Theme (Default) === */
+  --color-zinc-950: #0b141a;
+  --color-zinc-900: #111b21;
+  --color-zinc-800: #202c33;
+  --color-zinc-850: #222e35;
   
-  --color-purple-50: #e8f9f5;
+  /* Emerald accent (ZapFlow brand) */
+  --color-purple-50:  #e8f9f5;
   --color-purple-100: #d1f3eb;
   --color-purple-200: #a3e7d7;
   --color-purple-300: #66d7be;
-  --color-purple-400: #25d366; /* WhatsApp bright green */
-  --color-purple-500: #128c7e; /* WhatsApp medium green */
-  --color-purple-600: #075e54; /* WhatsApp dark green */
+  --color-purple-400: #25d366; /* ZapFlow/WhatsApp bright green */
+  --color-purple-500: #128c7e; /* ZapFlow medium green */
+  --color-purple-600: #075e54; /* ZapFlow dark green */
   --color-purple-650: #008069;
   --color-purple-700: #005e4d;
   --color-purple-800: #004d40;
@@ -36,30 +38,115 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
   transition: background-color 0.3s ease, color 0.3s ease;
+  /* Safe area insets for iOS PWA */
+  padding-env: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
-/* Light Theme Variables Overrides for Tailwind CSS v4 */
+/* ================================================
+   LIGHT THEME — Corrección completa de contraste
+   Cumple WCAG AA para todos los textos
+   ================================================ */
 body.theme-light {
-  --background: #f4f6f8;
-  --foreground: #1c272e;
-  
-  --color-zinc-950: #ffffff; /* Fondo primario blanco para tarjetas e inputs */
-  --color-zinc-900: #f4f6f8; /* Fondo secundario claro */
-  --color-zinc-800: #eaeef1; /* Paneles y sidebar claros */
-  --color-zinc-850: #d1d7db; /* Bordes claros y elementos activos */
-  
-  --color-zinc-100: #111b21; /* Texto principal oscuro */
-  --color-zinc-200: #1c272e;
-  --color-zinc-300: #2a3942; /* Texto intermedio */
-  --color-zinc-400: #54656f; /* Texto secundario */
-  --color-zinc-500: #667781;
-  --color-zinc-600: #8696a0; /* Placeholders y bordes sutiles */
-  
-  /* Ajuste de colores del bot en modo claro */
-  --color-purple-200: #075e54; /* Texto del bot en color verde oscuro */
-  --color-purple-950: #e8f9f5; /* Burbuja del bot verde muy claro */
-  --color-purple-900: #d1f3eb;
+  --background: #f0f2f5;
+  --foreground: #111b21;
+
+  /* === Fondos y paneles claros === */
+  --color-zinc-950: #ffffff;       /* Tarjetas, inputs — blanco puro */
+  --color-zinc-900: #f0f2f5;       /* Fondo página */
+  --color-zinc-800: #e8ecef;       /* Paneles, sidebar */
+  --color-zinc-850: #d1d7db;       /* Bordes visibles */
+
+  /* === Textos — siempre oscuros sobre fondos claros === */
+  --color-zinc-100: #111b21;       /* Texto primario, headings — NEGRO */
+  --color-zinc-200: #1c272e;       /* Texto importante */
+  --color-zinc-300: #2a3942;       /* Texto principal */
+  --color-zinc-400: #3b4a54;       /* Texto secundario — contraste suficiente */
+  --color-zinc-500: #54656f;       /* Labels, placeholders */
+  --color-zinc-600: #667781;       /* Texto de apoyo */
+  --color-zinc-700: #8696a0;       /* Texto muy secundario */
+
+  /* === Bot/ZapFlow en modo claro === */
+  --color-purple-200: #075e54;     /* Texto del bot verde oscuro */
+  --color-purple-950: #dcf8c6;     /* Burbuja bot verde claro */
+  --color-purple-900: #e8f5e9;     /* Burbuja bot alternativa */
 }
 
+/* ================================================
+   OVERRIDE EXPLÍCITOS MODO CLARO
+   Para clases que no usan variables de color
+   ================================================ */
+body.theme-light .text-white {
+  color: #111b21 !important;
+}
+body.theme-light .text-zinc-100,
+body.theme-light .text-zinc-200,
+body.theme-light .text-zinc-300 {
+  color: #1c272e !important;
+}
+body.theme-light .text-zinc-400 {
+  color: #3b4a54 !important;
+}
+body.theme-light .text-zinc-500,
+body.theme-light .text-zinc-600 {
+  color: #54656f !important;
+}
+
+/* Fondos de tarjetas en modo claro */
+body.theme-light .bg-zinc-950\/90,
+body.theme-light .bg-zinc-950\/60,
+body.theme-light .bg-zinc-950\/40,
+body.theme-light .bg-zinc-950\/20,
+body.theme-light .bg-zinc-950\/10 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+}
+body.theme-light .bg-zinc-900\/60,
+body.theme-light .bg-zinc-900\/40,
+body.theme-light .bg-zinc-900\/20 {
+  background-color: rgba(240, 242, 245, 0.8) !important;
+}
+
+/* Bordes en modo claro */
+body.theme-light .border-zinc-900,
+body.theme-light .border-zinc-850,
+body.theme-light .border-zinc-800 {
+  border-color: #d1d7db !important;
+}
+
+/* Badges y chips en modo claro */
+body.theme-light .bg-zinc-900 {
+  background-color: #e8ecef !important;
+}
+body.theme-light .bg-zinc-800 {
+  background-color: #dde1e4 !important;
+}
+
+/* ================================================
+   UTILIDADES GLOBALES
+   ================================================ */
+
+/* Scroll fino */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #222e35; border-radius: 9999px; }
+body.theme-light ::-webkit-scrollbar-thumb { background: #d1d7db; }
+
+/* PWA safe area */
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.safe-top    { padding-top:    env(safe-area-inset-top,    0px); }
+
+/* Animación de entrada para tarjetas de pedido */
+@keyframes slideInCard {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+.order-card-enter { animation: slideInCard 0.25s ease forwards; }
+
+/* Pulse ring para nuevos pedidos */
+@keyframes pulseRing {
+  0%   { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.4); }
+  70%  { box-shadow: 0 0 0 12px rgba(37, 211, 102, 0);  }
+  100% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0);     }
+}
+.new-order-ring { animation: pulseRing 1.5s ease 3; }
