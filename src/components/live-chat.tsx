@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Archive, Trash2, Sparkles, X, ArchiveRestore, RefreshCw, CheckCircle } from 'lucide-react'
+import { Archive, Trash2, Sparkles, X, ArchiveRestore, RefreshCw, CheckCircle, ArrowLeft } from 'lucide-react'
 
 interface Session {
   id: string
@@ -34,6 +34,7 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     initialSessions[0]?.id || null
   )
+  const [mobileView, setMobileView] = useState<'list' | 'chat'>('list')
 
   // Ref que siempre apunta al sessionId activo — evita closures stale en el canal Realtime
   const selectedSessionIdRef = useRef<string | null>(initialSessions[0]?.id || null)
@@ -42,6 +43,11 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
   const selectSession = useCallback((id: string | null) => {
     selectedSessionIdRef.current = id
     setSelectedSessionId(id)
+    if (id) {
+      setMobileView('chat')
+    } else {
+      setMobileView('list')
+    }
   }, [])
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState('')
@@ -552,11 +558,11 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
   )
 
   return (
-    <div className="border border-zinc-900 bg-zinc-950/60 rounded-2xl overflow-hidden grid grid-cols-1 md:grid-cols-3 h-[650px] shadow-sm font-sans">
+    <div className="border border-zinc-900 bg-zinc-950/60 rounded-2xl overflow-hidden flex h-[600px] md:h-[650px] shadow-sm font-sans w-full">
       
       {/* 1. SECCIÓN IZQUIERDA: LISTA DE CONVERSACIONES */}
-      <div className="border-r border-zinc-900 flex flex-col h-full bg-zinc-950">
-        <div className="p-2 border-b border-zinc-900 flex bg-zinc-950/45 gap-1">
+      <div className={`${mobileView === 'chat' ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-80 shrink-0 border-r border-zinc-900 h-full bg-zinc-950`}>
+        <div className="p-2 border-b border-zinc-900 flex bg-zinc-950/45 gap-1 shrink-0">
           <button
             onClick={() => { setShowArchived(false); selectSession(sessions.find(s => !s.is_archived)?.id || null); }}
             className={`flex-1 py-2 text-center text-[10px] uppercase font-bold rounded-lg transition-all ${!showArchived ? 'bg-zinc-900 text-white border border-zinc-800' : 'text-zinc-500 hover:text-zinc-350'}`}
@@ -618,37 +624,48 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
       </div>
 
       {/* 2. SECCIÓN DERECHA: CONVERSACIÓN ACTIVA */}
-      <div className="col-span-2 flex flex-col h-full bg-zinc-950/20 relative">
+      <div className={`${mobileView === 'list' ? 'hidden md:flex' : 'flex'} flex-1 flex-col h-full bg-zinc-950/20 relative min-w-0`}>
         {currentSession ? (
           <>
             {/* Header del Chat */}
-            <div className="p-4 border-b border-zinc-900 bg-zinc-950/60 flex items-center justify-between">
-              <div>
-                <span className="font-bold text-xs text-white">
-                  Cliente: {currentSession.customer_name ? `${currentSession.customer_name} (${currentSession.customer_phone})` : currentSession.customer_phone}
-                </span>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className={`h-1.5 w-1.5 rounded-full ${currentSession.status === 'human_required' ? 'bg-red-400 animate-pulse' : 'bg-purple-400'}`} />
-                  <span className="text-[10px] text-zinc-500">
-                    {currentSession.status === 'human_required' ? 'Monitoreando en modo manual' : 'El Bot Gemini está respondiendo automáticamente'}
+            <div className="p-3 md:p-4 border-b border-zinc-900 bg-zinc-950/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                {/* Botón Atrás para móvil */}
+                <button
+                  onClick={() => setMobileView('list')}
+                  title="Volver a la lista"
+                  className="md:hidden p-1.5 text-zinc-400 hover:text-white rounded-lg bg-zinc-900 border border-zinc-800 shrink-0 cursor-pointer"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+                <div className="min-w-0">
+                  <span className="font-bold text-xs text-white block truncate">
+                    {currentSession.customer_name ? `${currentSession.customer_name} (${currentSession.customer_phone})` : currentSession.customer_phone}
                   </span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${currentSession.status === 'human_required' ? 'bg-red-400 animate-pulse' : 'bg-purple-400'}`} />
+                    <span className="text-[10px] text-zinc-500 truncate">
+                      {currentSession.status === 'human_required' ? 'Monitoreando en modo manual' : 'El Bot Gemini está respondiendo automáticamente'}
+                    </span>
+                  </div>
                 </div>
               </div>
               
-              <div className="flex items-center gap-2">
+              {/* Contenedor de Botones — responsive */}
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <button
                   onClick={() => handleGenerateSummary(currentSession.id)}
                   title="Generar Resumen de Chat con IA"
-                  className="rounded-lg border border-purple-500/20 bg-purple-500/5 hover:bg-purple-500/10 p-2 text-xs font-bold text-purple-450 transition-all flex items-center gap-1 cursor-pointer"
+                  className="rounded-lg border border-purple-500/20 bg-purple-500/5 hover:bg-purple-500/10 p-1.5 text-[10px] font-bold text-purple-400 transition-all flex items-center gap-1 cursor-pointer"
                 >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  <span>Resumen IA</span>
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                  <span className="hidden sm:inline">Resumen IA</span>
                 </button>
 
                 <button
                   onClick={() => handleToggleArchive(currentSession)}
                   title={currentSession.is_archived ? "Desarchivar Conversación" : "Archivar Conversación"}
-                  className="rounded-lg border border-zinc-800 bg-zinc-900 p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all cursor-pointer"
+                  className="rounded-lg border border-zinc-800 bg-zinc-900 p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all cursor-pointer"
                 >
                   {currentSession.is_archived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
                 </button>
@@ -656,30 +673,30 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
                 <button
                   onClick={() => handleDeleteChat(currentSession.id)}
                   title="Cerrar Conversación (Finalizar y reiniciar chat)"
-                  className="rounded-lg border border-emerald-900/30 bg-emerald-950/10 px-3.5 py-2 text-emerald-400 hover:text-emerald-350 hover:bg-emerald-950/30 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold shadow-sm"
+                  className="rounded-lg border border-emerald-900/30 bg-emerald-950/10 px-2 py-1.5 text-emerald-400 hover:text-emerald-350 hover:bg-emerald-950/30 transition-all cursor-pointer flex items-center gap-1 text-[10px] font-bold shadow-sm"
                 >
-                  <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
-                  <span>Cerrar Conversación</span>
+                  <CheckCircle className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                  <span className="hidden sm:inline">Cerrar</span>
                 </button>
 
                 <button
                   onClick={() => handleToggleTakeover(currentSession)}
-                  className={`rounded-lg px-3.5 py-1.5 text-xs font-bold border transition-all cursor-pointer ${
+                  className={`rounded-lg px-2.5 py-1.5 text-[10px] font-bold border transition-all cursor-pointer ${
                     currentSession.status === 'human_required'
-                      ? 'bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20 shadow-md shadow-red-500/5'
+                      ? 'bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20 shadow-md'
                       : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
                   }`}
                 >
-                  {currentSession.status === 'human_required' ? '🤖 Habilitar Bot' : '👨‍💼 Tomar Control'}
+                  {currentSession.status === 'human_required' ? '🤖 Activar Bot' : '👨‍💼 Manual'}
                 </button>
               </div>
             </div>
 
             {/* Layout dividido para chat y panel de resumen */}
-            <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 flex overflow-hidden min-h-0 relative">
               {/* Ventana de Mensajes */}
-              <div className="flex-1 flex flex-col h-full bg-zinc-950/5">
-                <div className="flex-1 overflow-y-auto p-5 space-y-4 max-h-[420px] min-h-[420px]">
+              <div className="flex-1 flex flex-col h-full bg-zinc-950/5 min-h-0">
+                <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-4 min-h-0">
                   {messages.map((m) => {
                     const isCustomer = m.sender === 'customer'
                     const isBot = m.sender === 'bot'
@@ -755,14 +772,14 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
                 </div>
 
                 {/* Input de Envío */}
-                <form onSubmit={handleSendAgentMessage} className="p-4 border-t border-zinc-900 bg-zinc-950/60 flex gap-2">
+                <form onSubmit={handleSendAgentMessage} className="p-4 border-t border-zinc-900 bg-zinc-950/60 flex gap-2 shrink-0">
                   <input
                     type="text"
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     placeholder={
                       currentSession.status === 'bot_handling' 
-                        ? "⚠️ Presiona 'Tomar Control' para responder manualmente..." 
+                        ? "⚠️ Presiona 'Manual' para responder..." 
                         : "Escribe un mensaje de respuesta (se enviará por WhatsApp)..."
                     }
                     disabled={currentSession.status === 'bot_handling'}
@@ -771,7 +788,7 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
                   <button
                     type="submit"
                     disabled={currentSession.status === 'bot_handling' || !newMessage.trim()}
-                    className="rounded-xl bg-purple-650 px-5 py-2.5 text-xs font-bold text-white hover:bg-purple-600 disabled:opacity-40 transition-colors shadow-lg shadow-purple-600/10 cursor-pointer"
+                    className="rounded-xl bg-purple-650 px-5 py-2.5 text-xs font-bold text-white hover:bg-purple-600 disabled:opacity-40 transition-colors shadow-lg shadow-purple-600/10 cursor-pointer shrink-0"
                   >
                     Enviar
                   </button>
@@ -780,8 +797,8 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
 
               {/* Panel de Resumen de IA en el lado derecho */}
               {showSummaryPanel && (
-                <div className="w-80 border-l border-zinc-900 bg-zinc-950/30 flex flex-col justify-between h-[480px] max-h-[480px]">
-                  <div className="p-4 border-b border-zinc-900 flex justify-between items-center bg-zinc-950/45">
+                <div className="absolute lg:relative inset-y-0 right-0 z-10 w-full sm:w-80 border-l border-zinc-900 bg-zinc-950 flex flex-col justify-between h-full min-h-0">
+                  <div className="p-4 border-b border-zinc-900 flex justify-between items-center bg-zinc-950/45 shrink-0">
                     <div className="flex items-center gap-1.5 text-xs font-bold text-purple-400">
                       <Sparkles className="h-4 w-4 animate-pulse" />
                       <span>Resumen de Conversación</span>
@@ -794,7 +811,7 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
                     </button>
                   </div>
                   
-                  <div className="flex-1 p-4 overflow-y-auto text-xs text-zinc-350 space-y-4">
+                  <div className="flex-1 p-4 overflow-y-auto text-xs text-zinc-350 space-y-4 min-h-0">
                     {isGeneratingSummary ? (
                       <div className="flex flex-col items-center justify-center py-20 space-y-3">
                         <RefreshCw className="h-5 w-5 text-purple-500 animate-spin" />
@@ -807,7 +824,7 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
                     )}
                   </div>
 
-                  <div className="p-3 border-t border-zinc-900 bg-zinc-950/40">
+                  <div className="p-3 border-t border-zinc-900 bg-zinc-950/40 shrink-0">
                     <button
                       onClick={() => handleGenerateSummary(currentSession.id)}
                       disabled={isGeneratingSummary}
