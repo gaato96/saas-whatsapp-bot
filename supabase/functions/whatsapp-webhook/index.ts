@@ -125,12 +125,13 @@ REGLAS DE PRESENTACIÓN DEL MENÚ (EVITAR PAREDES DE TEXTO):
 FLUJO ESPECÍFICO DE PEDIDO DE COMIDA:
 1. Saluda cordialmente, preséntate, asesora al cliente recomendando alguna especialidad o categoría y pregúntale qué le gustaría ordenar hoy.
 2. Pregunta qué desea ordenar. Agrega los productos solicitados al carrito.
-3. Cuando el cliente diga que finalizó, pídele su dirección completa de envío y calcula el total de la compra (Suma total de ítems + Costo de envío).
-4. Pregunta cómo desea pagar (Efectivo o Transferencia).
-5. Si elige Transferencia: Muestra los datos de transferencia bancaria y pídele que por favor te envíe una captura del comprobante por este chat. E INMEDIATAMENTE imprime la etiqueta de cierre de orden [ORDER_JSON: ...] al final de tu respuesta para registrar el pedido como "Pendiente de Pago".
-6. Si elige Efectivo: Infórmale que pagará al recibir el pedido e imprime la etiqueta de cierre de orden [ORDER_JSON: ...] al final de tu respuesta.
-7. La etiqueta [ORDER_JSON: ...] debe ser el único medio por el cual registramos el pedido en nuestro sistema. Debe imprimirse en una sola línea al final del mensaje (sin formato adicional):
-   [ORDER_JSON: {"items": [{"product_id": "UUID", "name": "Nombre", "qty": 1, "price": 10.50}], "payment_method": "transfer" o "cash", "total": Total}]
+3. Cuando el cliente diga que finalizó, pídele su nombre, su dirección completa de envío y si tiene alguna observación o indicación especial para la entrega (ej. "Tocar timbre de reja", "Traer cambio de $5000", "Sin cebolla", etc.).
+4. Calcula el total de la compra (Suma total de ítems + Costo de envío).
+5. Pregunta cómo desea pagar (Efectivo o Transferencia).
+6. Si elige Transferencia: Muestra los datos de transferencia bancaria y pídele que por favor te envíe una captura del comprobante por este chat. E INMEDIATAMENTE imprime la etiqueta de cierre de orden [ORDER_JSON: ...] al final de tu respuesta.
+7. Si elige Efectivo: Infórmale que pagará al recibir el pedido e imprime la etiqueta de cierre de orden [ORDER_JSON: ...] al final de tu respuesta.
+8. La etiqueta [ORDER_JSON: ...] debe imprimirse en una sola línea al final del mensaje (sin formato adicional) en el siguiente formato exacto:
+   [ORDER_JSON: {"items": [{"product_id": "UUID", "name": "Nombre", "qty": 1, "price": 10.50, "notes": "Notas del plato si las hay"}], "payment_method": "transfer" o "cash", "total": Total, "customer_name": "Nombre Cliente", "delivery_address": "Dirección completa", "notes": "Observaciones de entrega"}]
 `;
   } else if (rubro === "Peluquería") {
     rubroPrompt = `
@@ -255,9 +256,36 @@ DISPONIBILIDAD Y STOCK (MÁXIMA PRIORIDAD):
 FLUJO ESPECÍFICO DE VENTA ONLINE:
 1. Saluda cordialmente y responde preguntas sobre talles, colores, modelos y precios del catálogo.
 2. Agrega los productos solicitados al carrito de compra respetando las unidades en stock.
-3. Pídele su Dirección Completa de envío y calcula el total de la compra (Suma de productos + Envío).
-4. Ofrece medios de pago (Efectivo o Transferencia) y cierra el pedido imprimiendo la etiqueta en una sola línea al final de tu respuesta:
-   [ORDER_JSON: {"items": [{"product_id": "UUID", "name": "Nombre Producto", "qty": Cantidad, "price": Precio}], "payment_method": "transfer" o "cash", "total": Total}]
+3. Pídele su nombre, su dirección completa de envío y si tiene alguna observación o nota especial.
+4. Calcula el total de la compra (Suma de productos + Envío).
+5. Ofrece medios de pago (Efectivo o Transferencia) y cierra el pedido imprimiendo la etiqueta en una sola línea al final:
+   [ORDER_JSON: {"items": [{"product_id": "UUID", "name": "Nombre Producto", "qty": Cantidad, "price": Precio, "notes": "Notas del ítem"}], "payment_method": "transfer" o "cash", "total": Total, "customer_name": "Nombre Cliente", "delivery_address": "Dirección completa", "notes": "Observaciones"}]
+`;
+  } else if (rubro === "iPhones") {
+    rubroPrompt = `
+- Tu rubro comercial es la Compra y Venta de iPhones (Teléfonos Apple nuevos y usados).
+- Moneda de referencia: USD (Dólares Estadounidenses). Toda la cotización de los equipos se realiza en USD. Si el cliente consulta conversión a pesos argentinos, puedes hacerlo amablemente, pero toda la transacción interna del carrito y catálogo se cierra en USD.
+- Datos bancarios para transferencia: Alias: ${rubroConfig.bank_details?.alias || "N/A"}, CBU: ${rubroConfig.bank_details?.cbu || "N/A"}, Titular: ${rubroConfig.bank_details?.titular || "N/A"}.
+
+DISPONIBILIDAD Y DETALLES EN VENTA (CATÁLOGO):
+- En tu catálogo de productos, cada iPhone en venta tiene detallada en su descripción la Condición de la Batería, Detalles Estéticos, Almacenamiento y Color (Ej: "Batería: 90% | Estética: Excelente | Almacenamiento: 128GB | Color: Negro").
+- Cuando asesores a los clientes sobre qué equipos tenemos para la venta, lee con extrema atención esta información del catálogo y detállasela. NUNCA inventes o supongas porcentajes de batería o colores que no estén en el catálogo actual.
+
+SISTEMA DE NEGOCIACIÓN DE CANJE (EQUIPO COMO FORMA DE PAGO):
+- Aceptamos iPhones usados en forma de pago (canje) o para compra directa.
+- Contamos con un listado de cotización de referencia configurado por el dueño del local:
+${JSON.stringify(rubroConfig.iphone_quoting_ranges || [])}
+- REGLAS DE NEGOCIACIÓN OBLIGATORIAS (SÉ UN EXCELENTE NEGOCIADOR):
+  1. Si el cliente ofrece un iPhone que está en esta lista de referencia, TU PRIMERA OFERTA por su equipo DEBE SER SIEMPRE el precio mínimo ("min_price") del rango para ese modelo. Nunca empieces ofreciendo más.
+  2. Si el cliente duda, protesta, dice que es muy poco, o te indica que el equipo está en óptimo estado, empieza a negociar subiendo el precio de manera progresiva (en saltos de 10, 20 o 30 USD) en tus siguientes respuestas.
+  3. Pídele detalles para justificar el aumento: pregúntale la condición exacta de su batería, si la pantalla o parte trasera tienen rayas o roturas, y si tiene su caja y accesorios originales.
+  4. NUNCA, BAJO NINGUNA CIRCUNSTANCIA, ofrezcas más del precio máximo ("max_price") establecido para ese modelo en la lista. Si el cliente exige más del máximo, explícale con total amabilidad y firmeza que es el límite que nos permite nuestro sistema y el tasador físico del local.
+  5. Si el modelo ofrecido por el cliente NO figura en la lista de cotización configurada, infórmale cordialmente que no disponemos de una cotización de referencia automatizada para ese modelo específico. Ofrécele que se acerque al local físico para que el tasador lo revise y cotice en persona.
+
+FLUJO DE CIERRE DE PEDIDO (CHECKOUT):
+1. Si el cliente compra un equipo directo o con canje (donde el total es el precio del iPhone comprado menos el valor tomado de su equipo usado), pídele su nombre completo, dirección completa si es con envío (o aclara que retira en local) y observaciones.
+2. Cierra la orden imprimiendo la etiqueta de cierre en una sola línea al final:
+   [ORDER_JSON: {"items": [{"product_id": "UUID_DEL_IPHONE_COMPRADO", "name": "iPhone Comprado", "qty": 1, "price": PrecioCompra}], "payment_method": "transfer" o "cash", "total": TotalFinal, "customer_name": "Nombre Cliente", "delivery_address": "Dirección o Retiro en Local", "notes": "Canje de iPhone ModeloX tomado a valor X USD. Observaciones..."}]
 `;
   } else {
     // Rubro Personalizado o Fallback
@@ -271,9 +299,9 @@ DISPONIBILIDAD Y STOCK:
 FLUJO GENERAL DE VENTA / ATENCIÓN:
 1. Responde dudas sobre los productos y servicios del catálogo.
 2. Si el usuario desea comprar o contratar, agrégalo al carrito conversacional respetando el stock disponible.
-3. Solicita la información de entrega o modalidad deseada.
-4. Define el método de pago y cierra la orden imprimiendo la etiqueta al final en una nueva línea:
-   [ORDER_JSON: {"items": [{"product_id": "UUID", "name": "Nombre", "qty": 1, "price": 10.00}], "payment_method": "transfer" o "cash", "total": Total}]
+3. Solicita el nombre del cliente, dirección completa de entrega y observaciones del pedido.
+4. Define el método de pago y cierra la orden imprimiendo la etiqueta al final:
+   [ORDER_JSON: {"items": [{"product_id": "UUID", "name": "Nombre", "qty": 1, "price": 10.00, "notes": "Notas"}], "payment_method": "transfer" o "cash", "total": Total, "customer_name": "Nombre Cliente", "delivery_address": "Dirección de entrega", "notes": "Observaciones"}]
 `;
   }
 
@@ -888,17 +916,57 @@ serve(async (req) => {
           if (isDuplicateOrder) {
             console.log("Saltando llamada a process_automatic_checkout por orden duplicada.")
           } else {
-            // Llamada a la función PostgreSQL process_automatic_checkout
-            const { data: checkoutResult, error: rpcErr } = await supabaseAdmin.rpc(
+            // Llamada a la función PostgreSQL con fallback seguro
+            let checkoutResult = null
+            let rpcErr = null
+
+            // Intentar con la firma de 8 parámetros
+            const rpcResponse = await supabaseAdmin.rpc(
               "process_automatic_checkout",
               {
                 p_business_id: business.id,
                 p_customer_phone: customerPhone,
                 p_payment_method: orderToCreate.payment_method,
                 p_total: orderToCreate.total,
-                p_items: orderToCreate.items
+                p_items: orderToCreate.items,
+                p_customer_name: orderToCreate.customer_name || null,
+                p_delivery_address: orderToCreate.delivery_address || null,
+                p_notes: orderToCreate.notes || null
               }
             )
+
+            checkoutResult = rpcResponse.data
+            rpcErr = rpcResponse.error
+
+            // Fallback si la base de datos no está actualizada con la nueva firma
+            if (rpcErr && (rpcErr.message?.includes("does not exist") || rpcErr.code === "PGRST500" || rpcErr.message?.includes("p_customer_name"))) {
+              console.log("[ZAPFLOW] Firma de RPC no coincide en DB. Ejecutando fallback con 5 parámetros...");
+              const fallbackResponse = await supabaseAdmin.rpc(
+                "process_automatic_checkout",
+                {
+                  p_business_id: business.id,
+                  p_customer_phone: customerPhone,
+                  p_payment_method: orderToCreate.payment_method,
+                  p_total: orderToCreate.total,
+                  p_items: orderToCreate.items
+                }
+              )
+              checkoutResult = fallbackResponse.data
+              rpcErr = fallbackResponse.error
+
+              // Si tuvo éxito, actualizar los campos adicionales directamente en la tabla
+              if (checkoutResult?.success && checkoutResult.order_id) {
+                console.log("[ZAPFLOW] Fallback exitoso. Actualizando campos adicionales de la orden directamente...");
+                await supabaseAdmin
+                  .from("orders_bookings")
+                  .update({
+                    customer_name: orderToCreate.customer_name || null,
+                    delivery_address: orderToCreate.delivery_address || null,
+                    notes: orderToCreate.notes || null
+                  })
+                  .eq("id", checkoutResult.order_id)
+              }
+            }
 
             if (rpcErr || !checkoutResult?.success) {
               const errorMsg = rpcErr?.message || checkoutResult?.error || "Error al verificar stock o crear el pedido."

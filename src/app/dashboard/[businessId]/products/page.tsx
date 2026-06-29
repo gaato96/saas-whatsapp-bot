@@ -3,6 +3,7 @@
 import React, { useEffect, useState, use, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { FileText, Plus, X, Upload, CheckCircle } from 'lucide-react'
+import { DolarWidget } from '@/components/dolar-widget'
 
 interface Product {
   id: string
@@ -97,6 +98,12 @@ export default function ProductsPage({ params }: ProductsPageProps) {
   const [description, setDescription] = useState('')
   const [price, setPrice] = useState('')
 
+  const [rubro, setRubro] = useState<string>('Personalizado')
+  const [batteryHealth, setBatteryHealth] = useState('100')
+  const [aestheticCondition, setAestheticCondition] = useState('Excelente')
+  const [storage, setStorage] = useState('128GB')
+  const [color, setColor] = useState('Negro')
+
   // Importación masiva
   const [menuText, setMenuText] = useState('')
   const [parsedItems, setParsedItems] = useState<ParsedItem[]>([])
@@ -112,6 +119,17 @@ export default function ProductsPage({ params }: ProductsPageProps) {
     const fetchProducts = async () => {
       setIsLoading(true)
       try {
+        // Obtener rubro del negocio
+        const { data: bizData } = await supabase
+          .from('businesses')
+          .select('rubro')
+          .eq('id', businessId)
+          .single()
+        
+        if (bizData) {
+          setRubro(bizData.rubro)
+        }
+
         const { data, error } = await supabase
           .from('products_services')
           .select('id, business_id, name, description, price, is_active')
@@ -120,14 +138,25 @@ export default function ProductsPage({ params }: ProductsPageProps) {
 
         if (error) throw error
         setProducts(data || [])
-      } catch {
+      } catch (err) {
         setDbConnected(false)
-        setProducts([
-          { id: 'p1', business_id: businessId, name: 'Pizza Muzzarella Individual', description: 'Pizzas', price: 1500, is_active: true },
-          { id: 'p2', business_id: businessId, name: 'Hamburguesa Triple Cheese', description: 'Hamburguesas', price: 2100, is_active: true },
-          { id: 'p3', business_id: businessId, name: 'Papas Fritas Medianas', description: 'Guarniciones', price: 350, is_active: true },
-          { id: 'p4', business_id: businessId, name: 'Coca Cola 500ml', description: 'Bebidas', price: 400, is_active: true },
-        ])
+        
+        // Cargar mocks según rubro
+        if (businessId.includes('iphone') || businessId === 'demo-iphones-id') {
+          setRubro('iPhones')
+          setProducts([
+            { id: 'p1', business_id: businessId, name: 'iPhone 11 Pro', description: 'Batería: 85% | Estética: Excelente | Almacenamiento: 128GB | Color: Space Gray', price: 320, is_active: true },
+            { id: 'p2', business_id: businessId, name: 'iPhone 12', description: 'Batería: 90% | Estética: Como Nuevo | Almacenamiento: 128GB | Color: Azul', price: 440, is_active: true },
+            { id: 'p3', business_id: businessId, name: 'iPhone 13 Pro Max', description: 'Batería: 94% | Estética: Excelente | Almacenamiento: 256GB | Color: Sierra Blue', price: 680, is_active: true },
+          ])
+        } else {
+          setProducts([
+            { id: 'p1', business_id: businessId, name: 'Pizza Muzzarella Individual', description: 'Pizzas', price: 1500, is_active: true },
+            { id: 'p2', business_id: businessId, name: 'Hamburguesa Triple Cheese', description: 'Hamburguesas', price: 2100, is_active: true },
+            { id: 'p3', business_id: businessId, name: 'Papas Fritas Medianas', description: 'Guarniciones', price: 350, is_active: true },
+            { id: 'p4', business_id: businessId, name: 'Coca Cola 500ml', description: 'Bebidas', price: 400, is_active: true },
+          ])
+        }
       } finally {
         setIsLoading(false)
       }
@@ -135,11 +164,24 @@ export default function ProductsPage({ params }: ProductsPageProps) {
     fetchProducts()
   }, [businessId, supabase])
 
-  // ── Agregar uno ──────────────────────────────────────────
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name || !price) return
-    const payload = { business_id: businessId, name, description, price: parseFloat(price), stock: 0, is_active: true }
+    
+    // Si es iPhones, el campo description se compone de los atributos custom
+    const finalDescription = rubro === 'iPhones'
+      ? `Batería: ${batteryHealth}% | Estética: ${aestheticCondition} | Almacenamiento: ${storage} | Color: ${color}`
+      : description
+
+    const payload = { 
+      business_id: businessId, 
+      name, 
+      description: finalDescription, 
+      price: parseFloat(price), 
+      stock: 1, // En iPhones el stock inicial de un equipo usado suele ser 1
+      is_active: true 
+    }
+
     try {
       if (!dbConnected) {
         setProducts(prev => [{ id: `mock-${Date.now()}`, ...payload }, ...prev])
@@ -149,6 +191,11 @@ export default function ProductsPage({ params }: ProductsPageProps) {
         if (data) setProducts(prev => [data, ...prev])
       }
       setName(''); setDescription(''); setPrice('')
+      // Resetear campos custom
+      setBatteryHealth('100')
+      setAestheticCondition('Excelente')
+      setStorage('128GB')
+      setColor('Negro')
       setActiveView('catalog')
     } catch (err: any) {
       setErrorMsg('No se pudo guardar: ' + err.message)
@@ -278,21 +325,28 @@ export default function ProductsPage({ params }: ProductsPageProps) {
             El bot de WhatsApp lee estos ítems en tiempo real para responder consultas y tomar pedidos.
           </p>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setActiveView(activeView === 'import' ? 'catalog' : 'import')}
-            className={`rounded-xl px-4 py-2.5 text-xs font-bold border transition-all flex items-center gap-1.5 ${activeView === 'import' ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-600/10' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20'}`}
-          >
-            <FileText className="h-3.5 w-3.5" />
-            Cargar Menú Completo
-          </button>
-          <button
-            onClick={() => setActiveView(activeView === 'add' ? 'catalog' : 'add')}
-            className={`rounded-xl px-4 py-2.5 text-xs font-bold border transition-all flex items-center gap-1.5 ${activeView === 'add' ? 'bg-purple-600 border-purple-500 text-white' : 'bg-purple-500/10 border-purple-500/20 text-purple-400 hover:bg-purple-500/20'}`}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Agregar Uno
-          </button>
+        <div className="flex gap-4 items-center flex-wrap">
+          {rubro === 'iPhones' && (
+            <div className="w-60 text-left shrink-0">
+              <DolarWidget />
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setActiveView(activeView === 'import' ? 'catalog' : 'import')}
+              className={`rounded-xl px-4 py-2.5 text-xs font-bold border transition-all flex items-center gap-1.5 ${activeView === 'import' ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-600/10' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20'}`}
+            >
+              <FileText className="h-3.5 w-3.5" />
+              Cargar Menú Completo
+            </button>
+            <button
+              onClick={() => setActiveView(activeView === 'add' ? 'catalog' : 'add')}
+              className={`rounded-xl px-4 py-2.5 text-xs font-bold border transition-all flex items-center gap-1.5 ${activeView === 'add' ? 'bg-purple-600 border-purple-500 text-white' : 'bg-purple-500/10 border-purple-500/20 text-purple-400 hover:bg-purple-500/20'}`}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Agregar Uno
+            </button>
+          </div>
         </div>
       </div>
 
@@ -441,22 +495,65 @@ export default function ProductsPage({ params }: ProductsPageProps) {
         <form onSubmit={handleAddProduct} className="p-6 border border-zinc-900 bg-zinc-950 rounded-2xl max-w-2xl space-y-4 shadow-sm">
           <h2 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
             <Plus className="h-3.5 w-3.5 text-purple-400" />
-            Nuevo Ítem al Catálogo
+            {rubro === 'iPhones' ? 'Nuevo iPhone al Inventario (USD)' : 'Nuevo Ítem al Catálogo'}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Nombre del Ítem *</label>
-              <input type="text" required className={inputClass} placeholder="Ej: Pasta Frola Membrillo" value={name} onChange={e => setName(e.target.value)} />
+              <label className="block text-[11px] text-zinc-500 font-bold uppercase tracking-wider">
+                {rubro === 'iPhones' ? 'Modelo de iPhone *' : 'Nombre del Ítem *'}
+              </label>
+              <input type="text" required className={inputClass} placeholder={rubro === 'iPhones' ? 'Ej: iPhone 12 Pro Max' : 'Ej: Pasta Frola Membrillo'} value={name} onChange={e => setName(e.target.value)} />
             </div>
             <div>
-              <label className="block text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Precio ($) *</label>
-              <input type="number" step="0.01" required className={inputClass} placeholder="Ej: 1400" value={price} onChange={e => setPrice(e.target.value)} />
+              <label className="block text-[11px] text-zinc-500 font-bold uppercase tracking-wider">
+                {rubro === 'iPhones' ? 'Precio (USD) *' : 'Precio ($) *'}
+              </label>
+              <input type="number" step="0.01" required className={inputClass} placeholder={rubro === 'iPhones' ? 'Ej: 520' : 'Ej: 1400'} value={price} onChange={e => setPrice(e.target.value)} />
             </div>
           </div>
-          <div>
-            <label className="block text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Categoría / Descripción</label>
-            <input type="text" className={inputClass} placeholder="Ej: Pizzas, Bebidas, Postres..." value={description} onChange={e => setDescription(e.target.value)} />
-          </div>
+
+          {rubro === 'iPhones' ? (
+            <div className="space-y-4 pt-1 border-t border-zinc-900/60">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Condición de Batería (%)</label>
+                  <input type="number" min="50" max="100" className={inputClass} placeholder="Ej: 85" value={batteryHealth} onChange={e => setBatteryHealth(e.target.value)} />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Almacenamiento</label>
+                  <select className={inputClass} value={storage} onChange={e => setStorage(e.target.value)}>
+                    <option value="64GB">64 GB</option>
+                    <option value="128GB">128 GB</option>
+                    <option value="256GB">256 GB</option>
+                    <option value="512GB">512 GB</option>
+                    <option value="1TB">1 TB</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Detalles Estéticos</label>
+                  <select className={inputClass} value={aestheticCondition} onChange={e => setAestheticCondition(e.target.value)}>
+                    <option value="Excelente">Excelente (Sin marcas)</option>
+                    <option value="Como Nuevo">Como Nuevo (Reacondicionado A+)</option>
+                    <option value="Muy Bueno">Muy Bueno (Marcas mínimas)</option>
+                    <option value="Bueno">Bueno (Detalles de uso visibles)</option>
+                    <option value="Detalles en pantalla">Detalles en pantalla / vidrio</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Color del Equipo</label>
+                  <input type="text" className={inputClass} placeholder="Ej: Gris Espacial, Sierra Blue" value={color} onChange={e => setColor(e.target.value)} />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Categoría / Descripción</label>
+              <input type="text" className={inputClass} placeholder="Ej: Pizzas, Bebidas, Postres..." value={description} onChange={e => setDescription(e.target.value)} />
+            </div>
+          )}
+
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setActiveView('catalog')} className="rounded-lg border border-zinc-800 text-zinc-400 px-4 py-2 text-xs font-bold hover:bg-zinc-900 transition-colors">Cancelar</button>
             <button type="submit" className="rounded-lg bg-purple-600 text-white px-4 py-2 text-xs font-bold hover:bg-purple-500 transition-colors">Guardar en Catálogo</button>

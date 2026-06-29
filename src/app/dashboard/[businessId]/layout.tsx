@@ -5,6 +5,8 @@ import { DashboardNav } from '@/components/dashboard-nav'
 import { MobileNav } from '@/components/mobile-nav'
 import { ArrowLeft, LogOut, Zap } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { DolarWidget } from '@/components/dolar-widget'
+
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -77,6 +79,13 @@ export default async function DashboardLayout({ children, params }: DashboardLay
               {rubro}
             </span>
           </div>
+
+          {/* Widget Dólar Blue (solo iPhones) */}
+          {rubro === 'iPhones' && (
+            <div className="px-1">
+              <DolarWidget />
+            </div>
+          )}
 
           {/* Menú de Navegación */}
           <DashboardNav businessId={businessId} rubro={rubro} enabledModules={enabledModules} />

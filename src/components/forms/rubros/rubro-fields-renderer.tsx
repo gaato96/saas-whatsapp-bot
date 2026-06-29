@@ -458,6 +458,105 @@ export function PersonalizadoFields({ control, register }: RubroFieldsProps) {
   )
 }
 
+// 11. Compra y Venta de iPhones
+export function IphonesFields({ control, register }: RubroFieldsProps) {
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: 'custom_metadata.iphone_quoting_ranges',
+  })
+
+  React.useEffect(() => {
+    if (fields.length === 0) {
+      append({ name: '', min_price: '', max_price: '' })
+    }
+  }, [fields, append])
+
+  return (
+    <div className="space-y-4 p-4 border rounded-xl bg-zinc-50 dark:bg-zinc-900 dark:border-zinc-800">
+      <div className="flex items-center justify-between">
+        <h3 className="text-md font-semibold text-zinc-900 dark:text-zinc-100">Configuración de Compra/Venta iPhones</h3>
+        <button
+          type="button"
+          onClick={() => append({ name: '', min_price: '', max_price: '' })}
+          className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+        >
+          + Agregar Modelo a Cotizar
+        </button>
+      </div>
+      <p className="text-xs text-zinc-500">
+        Establece los rangos de precios de referencia para la toma de equipos en parte de pago (canje).
+      </p>
+      <div className="space-y-3">
+        {fields.map((field, index) => (
+          <div key={field.id} className="flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Modelo (ej: iPhone 11 128GB)"
+              className="flex-[2] rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm focus:border-zinc-900 focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
+              {...register(`custom_metadata.iphone_quoting_ranges.${index}.name`)}
+            />
+            <input
+              type="number"
+              placeholder="Mínimo USD"
+              className="flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm focus:border-zinc-900 focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
+              {...register(`custom_metadata.iphone_quoting_ranges.${index}.min_price`)}
+            />
+            <input
+              type="number"
+              placeholder="Máximo USD"
+              className="flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm focus:border-zinc-900 focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
+              {...register(`custom_metadata.iphone_quoting_ranges.${index}.max_price`)}
+            />
+            {fields.length > 1 && (
+              <button
+                type="button"
+                onClick={() => remove(index)}
+                className="rounded-lg border border-red-200 text-red-600 px-3 py-2 text-sm hover:bg-red-50 dark:border-red-900/30 dark:text-red-400 dark:hover:bg-red-950/20"
+              >
+                Eliminar
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Datos bancarios */}
+      <div className="p-3 border rounded-lg bg-white dark:bg-zinc-950 dark:border-zinc-800 space-y-3 mt-4">
+        <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block">Datos Bancarios para Transferencia</span>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-[10px] font-medium text-zinc-400">Alias CBU</label>
+            <input
+              type="text"
+              className="mt-1 block w-full rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs focus:border-zinc-900 focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
+              placeholder="Alias"
+              {...register('custom_metadata.bank_details.alias')}
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-medium text-zinc-400">CBU / CVU</label>
+            <input
+              type="text"
+              className="mt-1 block w-full rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs focus:border-zinc-900 focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
+              placeholder="CBU"
+              {...register('custom_metadata.bank_details.cbu')}
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-medium text-zinc-400">Titular de Cuenta</label>
+            <input
+              type="text"
+              className="mt-1 block w-full rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs focus:border-zinc-900 focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
+              placeholder="Nombre Titular"
+              {...register('custom_metadata.bank_details.titular')}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Renderizador Central de Rubros
 export function RubroFieldsRenderer({ rubro, register, errors, control }: RubroFieldsProps & { rubro: string }) {
   switch (rubro) {
@@ -479,6 +578,8 @@ export function RubroFieldsRenderer({ rubro, register, errors, control }: RubroF
       return <ServiciosFields register={register} errors={errors} />
     case 'Automotriz':
       return <AutomotrizFields register={register} errors={errors} />
+    case 'iPhones':
+      return <IphonesFields control={control} register={register} errors={errors} />
     case 'Personalizado':
     default:
       return <PersonalizadoFields control={control} register={register} errors={errors} />

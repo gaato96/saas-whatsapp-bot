@@ -16,6 +16,7 @@ const RUBROS = [
   'Servicios', 
   'Automotriz', 
   'Agencia',
+  'iPhones',
   'Personalizado'
 ]
 
@@ -85,7 +86,7 @@ export function BusinessForm({ initialValues, onSubmit, isLoading = false, isEdi
 
   // Auto-seleccionar módulos recomendados según el rubro comercial elegido
   useEffect(() => {
-    if (selectedRubro === 'Comida' || selectedRubro === 'E-commerce' || selectedRubro === 'Cursos') {
+    if (selectedRubro === 'Comida' || selectedRubro === 'E-commerce' || selectedRubro === 'Cursos' || selectedRubro === 'iPhones') {
       setValue('enabled_modules', ['chat', 'clients', 'ai_config', 'business_config', 'whatsapp_config', 'crm', 'catalog'])
     } else if (
       selectedRubro === 'Peluquería' || 

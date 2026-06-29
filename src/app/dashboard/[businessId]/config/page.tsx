@@ -95,6 +95,9 @@ export default function ConfigPage({ params }: ConfigPageProps) {
   // Personalizado
   const [keyValueFields, setKeyValueFields] = useState<{ key: string; value: string }[]>([])
 
+  // iPhones (Cotizador)
+  const [iphoneQuotingRanges, setIphoneQuotingRanges] = useState<{ name: string; min_price: string; max_price: string }[]>([])
+
   // Cargar datos
   useEffect(() => {
     const fetchData = async () => {
@@ -188,6 +191,7 @@ export default function ConfigPage({ params }: ConfigPageProps) {
           setAgencyType(meta.agency_type || '')
           
           setKeyValueFields(meta.keyValueFields || [{ key: '', value: '' }])
+          setIphoneQuotingRanges(meta.iphone_quoting_ranges || [{ name: '', min_price: '', max_price: '' }])
         }
       } catch (err: any) {
         console.warn("Fallo cargando configuraciones. Usando mocks locales.", err)
@@ -222,6 +226,19 @@ export default function ConfigPage({ params }: ConfigPageProps) {
           setSpecialists('Carlos Ortiz, Sofía Gómez')
           setAverageDuration('45')
           setCancellationPolicy('Permitido avisar hasta 2 horas antes de la cita.')
+        } else if (businessId === 'demo-iphones-id' || businessId.includes('iphone')) {
+          setBusinessName('iPhone Store (Demo)')
+          setRubro('iPhones')
+          setAddress('Av. Libertador 4567, CABA')
+          setContactPhone('+54 11 3829-2819')
+          setBankAlias('IPHONE.STORE.MP')
+          setBankCbu('0000003100008888888888')
+          setBankTitular('iPhone Store Canjes')
+          setIphoneQuotingRanges([
+            { name: 'iPhone 11 128GB', min_price: '250', max_price: '300' },
+            { name: 'iPhone 12 128GB', min_price: '350', max_price: '420' },
+            { name: 'iPhone 13 128GB', min_price: '480', max_price: '550' }
+          ])
         } else {
           setBusinessName('Negocio Personalizado (Demo)')
           setRubro('Personalizado')
@@ -311,7 +328,8 @@ export default function ConfigPage({ params }: ConfigPageProps) {
         agency_specialties: agencySpecialties,
         meeting_type: meetingType,
         agency_type: agencyType,
-        keyValueFields
+        keyValueFields,
+        iphone_quoting_ranges: iphoneQuotingRanges
       }
 
       if (!dbConnected || businessId.startsWith('demo-') || businessId === 'zapas-premium') {
@@ -370,6 +388,17 @@ export default function ConfigPage({ params }: ConfigPageProps) {
   }
   const handleUpdateKeyValue = (index: number, field: 'key' | 'value', val: string) => {
     setKeyValueFields(prev => prev.map((item, idx) => idx === index ? { ...item, [field]: val } : item))
+  }
+
+  // iPhones cotizador handlers
+  const handleAddIphoneRange = () => {
+    setIphoneQuotingRanges(prev => [...prev, { name: '', min_price: '', max_price: '' }])
+  }
+  const handleRemoveIphoneRange = (index: number) => {
+    setIphoneQuotingRanges(prev => prev.filter((_, idx) => idx !== index))
+  }
+  const handleUpdateIphoneRange = (index: number, field: 'name' | 'min_price' | 'max_price', val: string) => {
+    setIphoneQuotingRanges(prev => prev.map((item, idx) => idx === index ? { ...item, [field]: val } : item))
   }
 
   if (isLoading) {
@@ -894,6 +923,93 @@ export default function ConfigPage({ params }: ConfigPageProps) {
                       value={agencySpecialties}
                       onChange={(e) => setAgencySpecialties(e.target.value)}
                     />
+                  </div>
+                </>
+              )}
+
+              {rubro === 'iPhones' && (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-[10px] text-zinc-450 uppercase font-bold tracking-wider">Alias Transferencia</label>
+                      <input
+                        type="text"
+                        className="mt-1 block w-full rounded border border-zinc-850 bg-zinc-900/40 px-2 py-1.5 text-xs text-white"
+                        placeholder="Alias"
+                        value={bankAlias}
+                        onChange={(e) => setBankAlias(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-zinc-450 uppercase font-bold tracking-wider">CBU / CVU</label>
+                      <input
+                        type="text"
+                        className="mt-1 block w-full rounded border border-zinc-850 bg-zinc-900/40 px-2 py-1.5 text-xs text-white"
+                        placeholder="22 dígitos"
+                        value={bankCbu}
+                        onChange={(e) => setBankCbu(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-zinc-450 uppercase font-bold tracking-wider">Titular de Cuenta</label>
+                      <input
+                        type="text"
+                        className="mt-1 block w-full rounded border border-zinc-850 bg-zinc-900/40 px-2 py-1.5 text-xs text-white"
+                        placeholder="Nombre"
+                        value={bankTitular}
+                        onChange={(e) => setBankTitular(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-zinc-900 pt-4 mt-2">
+                    <div>
+                      <span className="text-[10px] text-zinc-450 uppercase font-bold block">Cotizador de iPhones (Canjes / Compras)</span>
+                      <span className="text-[9px] text-zinc-500 mt-0.5 block">Configura el rango en USD por el que el Bot cotizará cada modelo usado.</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddIphoneRange}
+                      className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-[10px] font-bold text-white transition-colors"
+                    >
+                      + Añadir Modelo
+                    </button>
+                  </div>
+                  <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+                    {iphoneQuotingRanges.map((item, index) => (
+                      <div key={index} className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          placeholder="Modelo (ej: iPhone 11 128GB)"
+                          className="flex-[2] rounded border border-zinc-850 bg-zinc-900/40 px-2.5 py-1.5 text-xs text-white"
+                          value={item.name}
+                          onChange={(e) => handleUpdateIphoneRange(index, 'name', e.target.value)}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Mínimo USD"
+                          className="flex-1 rounded border border-zinc-850 bg-zinc-900/40 px-2.5 py-1.5 text-xs text-white font-mono"
+                          value={item.min_price}
+                          onChange={(e) => handleUpdateIphoneRange(index, 'min_price', e.target.value)}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Máximo USD"
+                          className="flex-1 rounded border border-zinc-850 bg-zinc-900/40 px-2.5 py-1.5 text-xs text-white font-mono"
+                          value={item.max_price}
+                          onChange={(e) => handleUpdateIphoneRange(index, 'max_price', e.target.value)}
+                        />
+                        {iphoneQuotingRanges.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveIphoneRange(index)}
+                            className="px-2 py-1.5 rounded border border-red-900/30 text-red-500 bg-red-950/10 hover:bg-red-950/20 text-xs font-bold transition-all"
+                          >
+                            Eliminar
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </>
               )}

@@ -25,6 +25,7 @@ interface Order {
   customer_name?: string
   customer_phone: string
   delivery_address?: string
+  notes?: string
   status: 'pending_payment' | 'confirmed' | 'processing' | 'shipped' | 'completed' | 'cancelled'
   payment_method: 'transfer' | 'cash'
   total: number
@@ -182,9 +183,23 @@ function OrderCard({ order, onUpdateStatus, onValidateTransfer, onConfirmPayment
 
         {/* Dirección de entrega */}
         {order.delivery_address && (
-          <div className="flex items-start gap-1.5 bg-zinc-900/50 rounded-lg px-2 py-1.5">
-            <MapPin className="h-3 w-3 text-zinc-500 mt-0.5 shrink-0" />
-            <span className="text-[10px] text-zinc-400 leading-relaxed">{order.delivery_address}</span>
+          <div className="flex items-start gap-1.5 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-2">
+            <MapPin className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <span className="block text-[9px] uppercase font-extrabold text-zinc-500 tracking-wider">Dirección de Entrega</span>
+              <span className="text-xs font-semibold text-zinc-200 leading-relaxed break-words">{order.delivery_address}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Observaciones generales del pedido */}
+        {order.notes && (
+          <div className="flex items-start gap-1.5 bg-amber-500/5 border border-amber-500/20 rounded-lg px-2.5 py-2">
+            <span className="text-[10px] text-amber-400 font-extrabold mt-0.5 shrink-0">📝</span>
+            <div className="flex-1 min-w-0">
+              <span className="block text-[9px] uppercase font-extrabold text-amber-500/80 tracking-wider">Observaciones</span>
+              <span className="text-xs font-semibold text-amber-200 leading-relaxed break-words">{order.notes}</span>
+            </div>
           </div>
         )}
 
@@ -197,8 +212,8 @@ function OrderCard({ order, onUpdateStatus, onValidateTransfer, onConfirmPayment
                   <strong className="text-zinc-100 font-bold">×{item.qty}</strong> {item.name}
                 </span>
                 {item.notes && (
-                  <div className="text-[9px] text-amber-400/80 italic mt-0.5 leading-relaxed">
-                    📝 {item.notes}
+                  <div className="text-[10px] text-amber-300 font-medium mt-0.5 leading-relaxed bg-amber-500/5 px-2 py-0.5 rounded border border-amber-500/10">
+                    Obs: {item.notes}
                   </div>
                 )}
               </div>
