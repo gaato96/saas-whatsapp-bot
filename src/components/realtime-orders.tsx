@@ -49,11 +49,16 @@ interface RealtimeOrdersProps {
 function getRubroLabels(rubro?: string): Partial<Record<keyof typeof STATUS_CONFIG, { label: string; emoji: string }>> {
   switch (rubro) {
     case 'E-commerce':
-    case 'iPhones':
       return {
         processing: { label: 'Preparando', emoji: '📦' },
         shipped:    { label: 'Enviado',     emoji: '🚚' },
         completed:  { label: 'Entregado',  emoji: '✅' },
+      }
+    case 'iPhones':
+      return {
+        processing: { label: 'Preparando',  emoji: '📱' },
+        shipped:    { label: 'Entregado',   emoji: '✅' },
+        completed:  { label: 'Cerrado',     emoji: '🏁' },
       }
     case 'Agencia':
       return {
@@ -383,10 +388,10 @@ function OrderActions({ order, onUpdateStatus, onValidateTransfer, onConfirmPaym
     const shippedLabel = (() => {
       switch (rubro) {
         case 'E-commerce': return 'Marcar Enviado 🚚'
-        case 'iPhones': return 'Marcar Enviado 🚚'
-        case 'Agencia': return 'Marcar Entregado 📤'
-        case 'Cursos': return 'Marcar Completado 🏆'
-        default: return 'Marcar Enviado 🛵'
+        case 'iPhones':    return 'Marcar Entregado 📲'
+        case 'Agencia':    return 'Marcar Entregado 📤'
+        case 'Cursos':     return 'Marcar Completado 🏆'
+        default:           return 'Marcar Enviado 🛵'
       }
     })()
     return (
@@ -598,8 +603,9 @@ export function RealtimeOrders({ businessId, initialOrders, rubro }: RealtimeOrd
 
     if (error) { alert('Error al actualizar el pedido.'); return }
 
-    // Si el pedido pasa a "Enviado", enviar mensaje WhatsApp
-    if (nextStatus === 'shipped') {
+    // Si el pedido pasa a "Enviado/Entregado", enviar mensaje WhatsApp SOLO para rubros de entrega a domicilio
+    const rubrosSendWA = ['Comida', 'Gastronomía', 'Restaurante', 'E-commerce']
+    if (nextStatus === 'shipped' && rubrosSendWA.some(r => rubro?.toLowerCase().includes(r.toLowerCase()))) {
       const order = orders.find(o => o.id === orderId)
       if (order) {
         try {
