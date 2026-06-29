@@ -248,11 +248,11 @@ function OrderCard({ order, onUpdateStatus, onValidateTransfer, onConfirmPayment
 
         {/* Observaciones generales del pedido */}
         {order.notes && (
-          <div className="flex items-start gap-1.5 bg-amber-500/5 border border-amber-500/20 rounded-lg px-2.5 py-2">
-            <span className="text-[10px] text-amber-400 font-extrabold mt-0.5 shrink-0">📝</span>
+          <div className="flex items-start gap-1.5 bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-2">
+            <span className="text-[10px] font-extrabold mt-0.5 shrink-0">📝</span>
             <div className="flex-1 min-w-0">
-              <span className="block text-[9px] uppercase font-extrabold text-amber-500/80 tracking-wider">Observaciones</span>
-              <span className="text-xs font-semibold text-amber-200 leading-relaxed break-words">{order.notes}</span>
+              <span className="block text-[9px] uppercase font-extrabold text-zinc-400 tracking-wider">Observaciones</span>
+              <span className="text-xs font-medium text-zinc-200 leading-relaxed break-words">{order.notes}</span>
             </div>
           </div>
         )}
@@ -266,7 +266,7 @@ function OrderCard({ order, onUpdateStatus, onValidateTransfer, onConfirmPayment
                   <strong className="text-zinc-100 font-bold">×{item.qty}</strong> {item.name}
                 </span>
                 {item.notes && (
-                  <div className="text-[10px] text-amber-300 font-medium mt-0.5 leading-relaxed bg-amber-500/5 px-2 py-0.5 rounded border border-amber-500/10">
+                  <div className="text-[10px] text-zinc-400 font-medium mt-0.5 leading-relaxed bg-zinc-800/60 px-2 py-0.5 rounded border border-zinc-700/60">
                     Obs: {item.notes}
                   </div>
                 )}
@@ -683,10 +683,14 @@ export function RealtimeOrders({ businessId, initialOrders, rubro }: RealtimeOrd
     return result
   }, [orders, statusFilter, searchQuery])
 
-  // Contadores por estado
+  // Contadores por estado — solo incluye completed recientes (últimas 24h)
   const counters = useMemo(() => {
     const c: Record<string, number> = {}
-    orders.forEach(o => { c[o.status] = (c[o.status] || 0) + 1 })
+    orders.forEach(o => {
+      // Excluir completed más viejos de 24h del contador de chips
+      if (o.status === 'completed' && isOlderThan(o.created_at, 1440)) return
+      c[o.status] = (c[o.status] || 0) + 1
+    })
     return c
   }, [orders])
 
