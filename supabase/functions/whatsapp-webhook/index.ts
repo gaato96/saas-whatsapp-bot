@@ -86,7 +86,7 @@ const corsHeaders = {
 /**
  * Inyecta las reglas del rubro, configuración del negocio y catálogo con stock.
  */
-function buildSystemPrompt(businessName: string, rubro: string, rubroConfig: any, products: any[], localTimeStr: string) {
+function buildSystemPrompt(businessName: string, rubro: string, rubroConfig: any, products: any[], localTimeStr: string, dolarBlueRate?: number | null) {
   // Determinar si el rubro requiere control de stock en el prompt
   const hasStockControl = ["E-commerce", "Personalizado"].includes(rubro);
 
@@ -262,10 +262,15 @@ FLUJO ESPECÍFICO DE VENTA ONLINE:
    [ORDER_JSON: {"items": [{"product_id": "UUID", "name": "Nombre Producto", "qty": Cantidad, "price": Precio, "notes": "Notas del ítem"}], "payment_method": "transfer" o "cash", "total": Total, "customer_name": "Nombre Cliente", "delivery_address": "Dirección completa", "notes": "Observaciones"}]
 `;
   } else if (rubro === "iPhones") {
+    const rateText = dolarBlueRate
+      ? `- Cotización actual del Dólar Blue (venta): $${dolarBlueRate} ARS. Si el cliente pregunta el precio de un equipo o una cotización en pesos argentinos (ARS), multiplica el valor en USD por esta cotización y explícale que equivale a aproximadamente $... ARS. Debes aclarar obligatoriamente que este precio en pesos es solo un estimativo de referencia sujeto a la cotización del Dólar Blue en el momento exacto en que se concrete la operación, y que el precio final se recalculará en dicho momento.`
+      : `- No poseemos cotización en tiempo real del Dólar Blue en pesos en este momento. Aclárale al cliente que todos los precios de referencia son en USD, y que de abonarse en pesos, se tomará a la cotización del Dólar Blue vendedor del día al momento de concretar la compra en el local.`;
+
     rubroPrompt = `
 - Tu rubro comercial es la Compra y Venta de iPhones (Teléfonos Apple nuevos y usados).
 - Moneda de referencia: USD (Dólares Estadounidenses). Toda la cotización de los equipos se realiza en USD. Si el cliente consulta conversión a pesos argentinos, puedes hacerlo amablemente, pero toda la transacción interna del carrito y catálogo se cierra en USD.
 - Datos bancarios para transferencia: Alias: ${rubroConfig.bank_details?.alias || "N/A"}, CBU: ${rubroConfig.bank_details?.cbu || "N/A"}, Titular: ${rubroConfig.bank_details?.titular || "N/A"}.
+${rateText}
 
 DISPONIBILIDAD Y DETALLES EN VENTA (CATÁLOGO):
 - En tu catálogo de productos, cada iPhone en venta tiene detallada en su descripción la Condición de la Batería, Detalles Estéticos, Almacenamiento y Color (Ej: "Batería: 90% | Estética: Excelente | Almacenamiento: 128GB | Color: Negro").
@@ -283,10 +288,17 @@ ${JSON.stringify(rubroConfig.iphone_quoting_ranges || [])}
   5. LÍMITE ABSOLUTO ("max_price"): Bajo ninguna circunstancia ofrezcas, sugieras o aceptes un valor mayor al "max_price" configurado para ese modelo. Si se alcanza ese límite, debes plantarte firmemente en ese número con amabilidad, explicando que es el tope máximo autorizado por nuestro tasador.
   6. MODELO NO CONFIGURADO: Si el modelo que tiene el cliente no coincide exactamente con ninguno de los nombres de la lista de referencia, indícale amablemente que no poseemos una cotización estimada automatizada para ese modelo en particular, y ofrécele que se acerque al local físico para que un técnico lo evalúe y cotice de forma presencial.
 
-FLUJO DE CIERRE DE PEDIDO (CHECKOUT):
-1. Si el cliente compra un equipo directo o con canje (donde el total es el precio del iPhone comprado menos el valor tomado de su equipo usado), pídele su nombre completo, dirección completa si es con envío (o aclara que retira en local) y observaciones.
-2. Cierra la orden imprimiendo la etiqueta de cierre en una sola línea al final:
-   [ORDER_JSON: {"items": [{"product_id": "UUID_DEL_IPHONE_COMPRADO", "name": "iPhone Comprado", "qty": 1, "price": PrecioCompra}], "payment_method": "transfer" o "cash", "total": TotalFinal, "customer_name": "Nombre Cliente", "delivery_address": "Dirección o Retiro en Local", "notes": "Canje de iPhone ModeloX tomado a valor X USD. Observaciones..."}]
+FLUJO DE CIERRE DE PEDIDO (CHECKOUT) Y VISITA AL LOCAL:
+1. COMPRA DIRECTA (SIN CANJE): Si el cliente compra un equipo directo sin entregar otro, pídele su nombre completo, método de pago, dirección completa si es con envío (o aclara que retira en local) y observaciones.
+2. COMPRA CON CANJE (ENTREGA DE EQUIPO USADO): Si el cliente entrega un equipo como forma de pago, es obligatorio agendar una visita al local físico para la tasación y diagnóstico final.
+   - Pídele al cliente sus datos: Nombre Completo y qué Día (y rango horario aproximado) se presentará en el local.
+   - Genera la orden con la etiqueta [ORDER_JSON: ...] al final de tu mensaje en una sola línea.
+   - En el campo "delivery_address" escribe: "Visita al local presencial el día [DÍA ACORDADO]".
+   - En el campo "customer_name" escribe su Nombre Completo.
+   - En el campo "notes" escribe obligatoriamente: "Visita programada. Canje de [MODELO USADO] (Condición: [DETALLES DE ESTADO/BATERÍA]) tomado a $${valor_acordado} USD como forma de pago. El cliente compra [MODELO COMPRADO]."
+   - En el campo "total" calcula la diferencia final a abonar (Precio del iPhone comprado - valor de su equipo usado). Si la diferencia es menor o igual a cero, escribe 0.
+3. Formato exacto de la etiqueta de orden al final de tu respuesta (en una sola línea):
+   [ORDER_JSON: {"items": [{"product_id": "UUID_DEL_IPHONE_COMPRADO", "name": "iPhone Comprado", "qty": 1, "price": PrecioCompra}], "payment_method": "transfer" o "cash", "total": TotalFinalDiferencia, "customer_name": "Nombre Cliente", "delivery_address": "Dirección o Visita al local presencial el día X", "notes": "Detalles del canje y observaciones"}]
 `;
   } else {
     // Rubro Personalizado o Fallback
@@ -829,8 +841,27 @@ serve(async (req) => {
         const monthNames = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
         const localTimeStr = `${dayNames[argNow.getUTCDay()]}, ${argNow.getUTCDate()} de ${monthNames[argNow.getUTCMonth()]} de ${argNow.getUTCFullYear()}, ${String(argNow.getUTCHours()).padStart(2, "0")}:${String(argNow.getUTCMinutes()).padStart(2, "0")} hs (UTC-3 Argentina)`
 
-        // 7. Construir System Prompt dinámico
-        const systemPrompt = buildSystemPrompt(business.name, business.rubro, rubroConfig, activeProducts, localTimeStr)
+        // 7. Obtener cotización de Dolar Blue si el rubro es iPhones
+        let dolarBlueRate = null
+        if (business.rubro === "iPhones") {
+          try {
+            console.log("Obteniendo cotización de Dolar Blue desde dolarapi...")
+            const res = await fetch("https://dolarapi.com/v1/dolares/blue")
+            if (res.ok) {
+              const json = await res.json()
+              dolarBlueRate = json.venta
+              console.log(`Dolar Blue cargado: $${dolarBlueRate}`)
+            } else {
+              console.warn(`Respuesta no ok de dolarapi: ${res.status}`)
+            }
+          } catch (e) {
+            console.warn("Error obteniendo Dolar Blue de dolarapi, usando fallback 1300", e)
+            dolarBlueRate = 1300
+          }
+        }
+
+        // 8. Construir System Prompt dinámico
+        const systemPrompt = buildSystemPrompt(business.name, business.rubro, rubroConfig, activeProducts, localTimeStr, dolarBlueRate)
 
         // Formatear el historial en la estructura de roles de la API de Gemini
         const contents = chatHistory.map(h => ({
