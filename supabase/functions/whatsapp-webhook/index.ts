@@ -88,7 +88,7 @@ const corsHeaders = {
  */
 function buildSystemPrompt(businessName: string, rubro: string, rubroConfig: any, products: any[], localTimeStr: string, dolarBlueRate?: number | null) {
   // Determinar si el rubro requiere control de stock en el prompt
-  const hasStockControl = ["E-commerce", "Personalizado"].includes(rubro);
+  const hasStockControl = ["E-commerce", "Personalizado", "iPhones"].includes(rubro);
 
   // Serializar el catálogo de productos con stock actual
   const catalogText = products.length > 0
@@ -274,6 +274,7 @@ ${rateText}
 
 DISPONIBILIDAD Y DETALLES EN VENTA (CATÁLOGO):
 - En tu catálogo de productos, cada iPhone en venta tiene detallada en su descripción la Condición de la Batería, Detalles Estéticos, Almacenamiento y Color (Ej: "Batería: 90% | Estética: Excelente | Almacenamiento: 128GB | Color: Negro").
+- Cada equipo también tiene indicado su Stock Disponible. Si el Stock Disponible de un equipo es 0 (cero), ese equipo NO está disponible para la venta en este momento. NUNCA le ofrezcas ni le menciones un equipo con Stock 0 como opción de compra disponible. Infórmale amablemente que ese modelo ya fue vendido y que puede consultar los modelos actualmente disponibles en el catálogo.
 - Cuando asesores a los clientes sobre qué equipos tenemos para la venta, lee con extrema atención esta información del catálogo y detállasela. NUNCA inventes o supongas porcentajes de batería o colores que no estén en el catálogo actual.
 
 SISTEMA DE NEGOCIACIÓN DE CANJE (EQUIPO COMO FORMA DE PAGO):

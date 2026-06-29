@@ -11,6 +11,7 @@ interface Product {
   name: string
   description: string
   price: number
+  stock: number
   is_active: boolean
 }
 
@@ -103,6 +104,7 @@ export default function ProductsPage({ params }: ProductsPageProps) {
   const [aestheticCondition, setAestheticCondition] = useState('Excelente')
   const [storage, setStorage] = useState('128GB')
   const [color, setColor] = useState('Negro')
+  const [stockQty, setStockQty] = useState('1')
 
   // Importación masiva
   const [menuText, setMenuText] = useState('')
@@ -132,7 +134,7 @@ export default function ProductsPage({ params }: ProductsPageProps) {
 
         const { data, error } = await supabase
           .from('products_services')
-          .select('id, business_id, name, description, price, is_active')
+          .select('id, business_id, name, description, price, stock, is_active')
           .eq('business_id', businessId)
           .order('created_at', { ascending: false })
 
@@ -145,16 +147,16 @@ export default function ProductsPage({ params }: ProductsPageProps) {
         if (businessId.includes('iphone') || businessId === 'demo-iphones-id') {
           setRubro('iPhones')
           setProducts([
-            { id: 'p1', business_id: businessId, name: 'iPhone 11 Pro', description: 'Batería: 85% | Estética: Excelente | Almacenamiento: 128GB | Color: Space Gray', price: 320, is_active: true },
-            { id: 'p2', business_id: businessId, name: 'iPhone 12', description: 'Batería: 90% | Estética: Como Nuevo | Almacenamiento: 128GB | Color: Azul', price: 440, is_active: true },
-            { id: 'p3', business_id: businessId, name: 'iPhone 13 Pro Max', description: 'Batería: 94% | Estética: Excelente | Almacenamiento: 256GB | Color: Sierra Blue', price: 680, is_active: true },
+            { id: 'p1', business_id: businessId, name: 'iPhone 11 Pro', description: 'Batería: 85% | Estética: Excelente | Almacenamiento: 128GB | Color: Space Gray', price: 320, stock: 1, is_active: true },
+            { id: 'p2', business_id: businessId, name: 'iPhone 12', description: 'Batería: 90% | Estética: Como Nuevo | Almacenamiento: 128GB | Color: Azul', price: 440, stock: 1, is_active: true },
+            { id: 'p3', business_id: businessId, name: 'iPhone 13 Pro Max', description: 'Batería: 94% | Estética: Excelente | Almacenamiento: 256GB | Color: Sierra Blue', price: 680, stock: 0, is_active: true },
           ])
         } else {
           setProducts([
-            { id: 'p1', business_id: businessId, name: 'Pizza Muzzarella Individual', description: 'Pizzas', price: 1500, is_active: true },
-            { id: 'p2', business_id: businessId, name: 'Hamburguesa Triple Cheese', description: 'Hamburguesas', price: 2100, is_active: true },
-            { id: 'p3', business_id: businessId, name: 'Papas Fritas Medianas', description: 'Guarniciones', price: 350, is_active: true },
-            { id: 'p4', business_id: businessId, name: 'Coca Cola 500ml', description: 'Bebidas', price: 400, is_active: true },
+            { id: 'p1', business_id: businessId, name: 'Pizza Muzzarella Individual', description: 'Pizzas', price: 1500, stock: 0, is_active: true },
+            { id: 'p2', business_id: businessId, name: 'Hamburguesa Triple Cheese', description: 'Hamburguesas', price: 2100, stock: 0, is_active: true },
+            { id: 'p3', business_id: businessId, name: 'Papas Fritas Medianas', description: 'Guarniciones', price: 350, stock: 0, is_active: true },
+            { id: 'p4', business_id: businessId, name: 'Coca Cola 500ml', description: 'Bebidas', price: 400, stock: 0, is_active: true },
           ])
         }
       } finally {
@@ -178,7 +180,7 @@ export default function ProductsPage({ params }: ProductsPageProps) {
       name, 
       description: finalDescription, 
       price: parseFloat(price), 
-      stock: 1, // En iPhones el stock inicial de un equipo usado suele ser 1
+      stock: parseInt(stockQty) || 1,
       is_active: true 
     }
 
@@ -190,7 +192,7 @@ export default function ProductsPage({ params }: ProductsPageProps) {
         if (error) throw error
         if (data) setProducts(prev => [data, ...prev])
       }
-      setName(''); setDescription(''); setPrice('')
+      setName(''); setDescription(''); setPrice(''); setStockQty('1')
       // Resetear campos custom
       setBatteryHealth('100')
       setAestheticCondition('Excelente')
@@ -275,6 +277,26 @@ export default function ProductsPage({ params }: ProductsPageProps) {
         const { error } = await supabase.from('products_services').update({ price: parsed }).eq('id', productId)
         if (error) throw error
         setProducts(prev => prev.map(p => p.id === productId ? { ...p, price: parsed } : p))
+      }
+      setSavingStates(prev => ({ ...prev, [productId]: 'saved' }))
+      setTimeout(() => setSavingStates(prev => ({ ...prev, [productId]: 'idle' })), 1500)
+    } catch {
+      setSavingStates(prev => ({ ...prev, [productId]: 'error' }))
+    }
+  }
+
+  // ── Edición inline de stock ──────────────────────────────
+  const saveInlineStock = async (productId: string, value: string) => {
+    const parsed = parseInt(value)
+    if (isNaN(parsed) || parsed < 0) return
+    setSavingStates(prev => ({ ...prev, [productId]: 'saving' }))
+    try {
+      if (!dbConnected) {
+        setProducts(prev => prev.map(p => p.id === productId ? { ...p, stock: parsed } : p))
+      } else {
+        const { error } = await supabase.from('products_services').update({ stock: parsed }).eq('id', productId)
+        if (error) throw error
+        setProducts(prev => prev.map(p => p.id === productId ? { ...p, stock: parsed } : p))
       }
       setSavingStates(prev => ({ ...prev, [productId]: 'saved' }))
       setTimeout(() => setSavingStates(prev => ({ ...prev, [productId]: 'idle' })), 1500)
@@ -563,6 +585,36 @@ export default function ProductsPage({ params }: ProductsPageProps) {
                   <input type="text" className={inputClass} placeholder="Ej: Gris Espacial, Sierra Blue" value={color} onChange={e => setColor(e.target.value)} />
                 </div>
               </div>
+              {/* Stock para iPhones */}
+              <div className="border-t border-zinc-900/60 pt-3">
+                <label className="block text-[11px] text-zinc-500 font-bold uppercase tracking-wider">📦 Stock disponible (unidades)</label>
+                <input
+                  type="number" min="0" max="999"
+                  className={inputClass}
+                  placeholder="Ej: 1"
+                  value={stockQty}
+                  onChange={e => setStockQty(e.target.value)}
+                />
+                <p className="mt-1 text-[10px] text-zinc-600">Para equipos únicos usados, dejá 1. El bot NO ofrecerá el equipo si el stock es 0.</p>
+              </div>
+            </div>
+          ) : rubro === 'E-commerce' ? (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Categoría / Descripción</label>
+                <input type="text" className={inputClass} placeholder="Ej: Ropa Mujer, Electrónica..." value={description} onChange={e => setDescription(e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-[11px] text-zinc-500 font-bold uppercase tracking-wider">📦 Stock disponible (unidades)</label>
+                <input
+                  type="number" min="0" max="9999"
+                  className={inputClass}
+                  placeholder="Ej: 15"
+                  value={stockQty}
+                  onChange={e => setStockQty(e.target.value)}
+                />
+                <p className="mt-1 text-[10px] text-zinc-600">El bot controlará el stock y no permitirá ventas si llega a 0.</p>
+              </div>
             </div>
           ) : (
             <div>
@@ -654,6 +706,26 @@ export default function ProductsPage({ params }: ProductsPageProps) {
                           className="bg-transparent border border-transparent focus:border-zinc-800 hover:border-zinc-900/60 rounded px-2.5 py-1 w-28 text-center text-emerald-400 font-mono font-bold focus:bg-zinc-900 focus:outline-none transition-all group-hover:border-zinc-900/50"
                         />
                       </td>
+                      {/* Columna de stock — solo para iPhones y E-commerce */}
+                      {(rubro === 'iPhones' || rubro === 'E-commerce') && (
+                        <td className="px-6 py-4 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            defaultValue={p.stock ?? 0}
+                            onBlur={e => { if (parseInt(e.target.value) !== (p.stock ?? 0)) saveInlineStock(p.id, e.target.value) }}
+                            className={`bg-transparent border rounded px-2 py-1 w-16 text-center font-mono font-bold focus:outline-none transition-all ${
+                              (p.stock ?? 0) === 0
+                                ? 'border-red-800/50 text-red-400 focus:border-red-600 hover:border-red-800'
+                                : 'border-transparent text-amber-400 focus:border-zinc-800 hover:border-zinc-900/60 focus:bg-zinc-900'
+                            }`}
+                            title={(p.stock ?? 0) === 0 ? 'Sin stock — el bot no ofrecerá este ítem' : `Stock: ${p.stock}`}
+                          />
+                          {(p.stock ?? 0) === 0 && (
+                            <div className="text-[9px] text-red-500 mt-0.5 font-bold">SIN STOCK</div>
+                          )}
+                        </td>
+                      )}
                       <td className="px-6 py-4 text-center">
                         <button
                           onClick={() => handleToggleActive(p.id, p.is_active)}
