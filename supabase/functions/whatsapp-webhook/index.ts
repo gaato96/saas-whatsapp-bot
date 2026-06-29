@@ -295,7 +295,7 @@ FLUJO DE CIERRE DE PEDIDO (CHECKOUT) Y VISITA AL LOCAL:
    - Genera la orden con la etiqueta [ORDER_JSON: ...] al final de tu mensaje en una sola línea.
    - En el campo "delivery_address" escribe: "Visita al local presencial el día [DÍA ACORDADO]".
    - En el campo "customer_name" escribe su Nombre Completo.
-   - En el campo "notes" escribe obligatoriamente: "Visita programada. Canje de [MODELO USADO] (Condición: [DETALLES DE ESTADO/BATERÍA]) tomado a $${valor_acordado} USD como forma de pago. El cliente compra [MODELO COMPRADO]."
+   - En el campo "notes" escribe obligatoriamente: "Visita programada. Canje de [MODELO USADO] (Condición: [DETALLES DE ESTADO/BATERÍA]) tomado a $[VALOR_ACORDADO] USD como forma de pago. El cliente compra [MODELO COMPRADO]."
    - En el campo "total" calcula la diferencia final a abonar (Precio del iPhone comprado - valor de su equipo usado). Si la diferencia es menor o igual a cero, escribe 0.
 3. Formato exacto de la etiqueta de orden al final de tu respuesta (en una sola línea):
    [ORDER_JSON: {"items": [{"product_id": "UUID_DEL_IPHONE_COMPRADO", "name": "iPhone Comprado", "qty": 1, "price": PrecioCompra}], "payment_method": "transfer" o "cash", "total": TotalFinalDiferencia, "customer_name": "Nombre Cliente", "delivery_address": "Dirección o Visita al local presencial el día X", "notes": "Detalles del canje y observaciones"}]
@@ -1109,7 +1109,7 @@ serve(async (req) => {
                   messaging_product: "whatsapp",
                   to: errPhone,
                   type: "text",
-                  text: { body: "Disculpá, estoy teniendo dificultades técnicas en este momento. Por favor, intentá de nuevo en unos segundos. 🙏" }
+                  text: { body: "Hola, soy el asistente virtual del local. En este momento estoy experimentando un inconveniente técnico temporal para procesar tu consulta. Por favor, volvé a enviar el mismo mensaje en unos minutos que ya debería estar solucionado. ¡Muchas gracias por tu paciencia! 🙏" }
                 })
               })
               console.log("Mensaje de cortesía de error enviado al usuario.")
