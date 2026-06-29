@@ -2,10 +2,76 @@ import React from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { RealtimeOrders } from '@/components/realtime-orders'
 import { redirect } from 'next/navigation'
-import { ShoppingBag, Flame, Truck, Clock } from 'lucide-react'
+import { ShoppingBag, Package, Briefcase, BookOpen, Smartphone, Clock, Flame, Truck, Package2, Wrench } from 'lucide-react'
 
 interface DashboardPageProps {
   params: Promise<{ businessId: string }>
+}
+
+// ── Configuración por rubro ───────────────────────────────────────────────────
+function getRubroPageConfig(rubro: string) {
+  switch (rubro) {
+    case 'Comida':
+      return {
+        icon: ShoppingBag,
+        title: 'Toma de Pedidos',
+        subtitle: 'Tiempo real — los pedidos del bot aparecen automáticamente',
+        processingLabel: 'en cocina',
+        processingIcon: Flame,
+        shippedLabel: 'en camino',
+        shippedIcon: Truck,
+      }
+    case 'E-commerce':
+      return {
+        icon: Package,
+        title: 'Ventas en Tiempo Real',
+        subtitle: 'Tiempo real — los pedidos del bot aparecen automáticamente',
+        processingLabel: 'preparando',
+        processingIcon: Package2,
+        shippedLabel: 'enviados',
+        shippedIcon: Truck,
+      }
+    case 'iPhones':
+      return {
+        icon: Smartphone,
+        title: 'Ventas en Tiempo Real',
+        subtitle: 'Tiempo real — las ventas del bot aparecen automáticamente',
+        processingLabel: 'preparando',
+        processingIcon: Package2,
+        shippedLabel: 'enviados',
+        shippedIcon: Truck,
+      }
+    case 'Agencia':
+      return {
+        icon: Briefcase,
+        title: 'Proyectos y Consultas',
+        subtitle: 'Tiempo real — las solicitudes del bot aparecen automáticamente',
+        processingLabel: 'en proceso',
+        processingIcon: Wrench,
+        shippedLabel: 'entregados',
+        shippedIcon: Truck,
+      }
+    case 'Cursos':
+      return {
+        icon: BookOpen,
+        title: 'Inscripciones en Tiempo Real',
+        subtitle: 'Tiempo real — las inscripciones del bot aparecen automáticamente',
+        processingLabel: 'en curso',
+        processingIcon: BookOpen,
+        shippedLabel: 'completados',
+        shippedIcon: null,
+      }
+    default:
+      return {
+        icon: ShoppingBag,
+        title: 'Operaciones en Tiempo Real',
+        subtitle: 'Tiempo real — las operaciones del bot aparecen automáticamente',
+        processingLabel: 'en proceso',
+        processingIcon: Wrench,
+        shippedLabel: 'enviados',
+        shippedIcon: Truck,
+      }
+  }
 }
 
 export default async function DashboardPage({ params }: DashboardPageProps) {
@@ -42,21 +108,27 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
 
     const { data } = await supabase
       .from('orders_bookings')
-      .select('id, business_id, customer_name, customer_phone, delivery_address, status, payment_method, payment_status, total, items, created_at')
+      .select('id, business_id, customer_name, customer_phone, delivery_address, notes, status, payment_method, payment_status, total, items, created_at')
       .eq('business_id', businessId)
       .order('created_at', { ascending: false })
-      .limit(300) // Optimizado para 200-300 pedidos por noche
+      .limit(300)
 
     initialOrders = data || []
   } catch (err) {
     console.log("No se pudieron cargar órdenes o validar módulos, cargando defaults.", err)
   }
 
-  // Estadísticas rápidas para el header (solo estados activos)
+  const cfg = getRubroPageConfig(businessRubro)
+  const PageIcon = cfg.icon
+
+  // Estadísticas rápidas
   const activeOrders = initialOrders.filter(o => ['pending_payment', 'confirmed', 'processing', 'shipped'].includes(o.status))
   const pendingCount = initialOrders.filter(o => o.status === 'pending_payment').length
-  const cookingCount = initialOrders.filter(o => o.status === 'processing').length
+  const processingCount = initialOrders.filter(o => o.status === 'processing').length
   const shippedCount = initialOrders.filter(o => o.status === 'shipped').length
+
+  const ProcessingIcon = cfg.processingIcon
+  const ShippedIcon = cfg.shippedIcon
 
   return (
     <div className="space-y-5">
@@ -65,11 +137,11 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-lg font-black text-white flex items-center gap-2">
-            <ShoppingBag className="h-5 w-5 text-emerald-400" />
-            Toma de Pedidos
+            <PageIcon className="h-5 w-5 text-emerald-400" />
+            {cfg.title}
           </h1>
           <p className="text-xs text-zinc-500 mt-0.5">
-            Tiempo real — los pedidos del bot aparecen automáticamente
+            {cfg.subtitle}
           </p>
         </div>
 
@@ -87,23 +159,23 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
               <span className="text-[10px] font-bold text-amber-400">{pendingCount} pendientes</span>
             </div>
           )}
-          {cookingCount > 0 && (
+          {processingCount > 0 && ProcessingIcon && (
             <div className="flex items-center gap-1 bg-purple-500/10 border border-purple-500/20 rounded-xl px-2.5 py-1.5">
-              <Flame className="h-3 w-3 text-purple-400" />
-              <span className="text-[10px] font-bold text-purple-400">{cookingCount} en cocina</span>
+              <ProcessingIcon className="h-3 w-3 text-purple-400" />
+              <span className="text-[10px] font-bold text-purple-400">{processingCount} {cfg.processingLabel}</span>
             </div>
           )}
-          {shippedCount > 0 && (
+          {shippedCount > 0 && ShippedIcon && (
             <div className="flex items-center gap-1 bg-teal-500/10 border border-teal-500/20 rounded-xl px-2.5 py-1.5">
-              <Truck className="h-3 w-3 text-teal-400" />
-              <span className="text-[10px] font-bold text-teal-400">{shippedCount} en camino</span>
+              <ShippedIcon className="h-3 w-3 text-teal-400" />
+              <span className="text-[10px] font-bold text-teal-400">{shippedCount} {cfg.shippedLabel}</span>
             </div>
           )}
         </div>
       </div>
 
       {/* Componente de Pedidos */}
-      <RealtimeOrders businessId={businessId} initialOrders={initialOrders} />
+      <RealtimeOrders businessId={businessId} initialOrders={initialOrders} rubro={businessRubro} />
     </div>
   )
 }

@@ -40,6 +40,59 @@ type StatusFilter = 'all' | Order['status']
 interface RealtimeOrdersProps {
   businessId: string
   initialOrders: Order[]
+  rubro?: string
+}
+
+// ============================================================
+// LABELS POR RUBRO — solo sobrescriben lo necesario
+// ============================================================
+function getRubroLabels(rubro?: string): Partial<Record<keyof typeof STATUS_CONFIG, { label: string; emoji: string }>> {
+  switch (rubro) {
+    case 'E-commerce':
+    case 'iPhones':
+      return {
+        processing: { label: 'Preparando', emoji: '📦' },
+        shipped:    { label: 'Enviado',     emoji: '🚚' },
+        completed:  { label: 'Entregado',  emoji: '✅' },
+      }
+    case 'Agencia':
+      return {
+        confirmed:  { label: 'Aceptado',   emoji: '📋' },
+        processing: { label: 'En Proceso', emoji: '⚙️' },
+        shipped:    { label: 'Entregado',  emoji: '📤' },
+        completed:  { label: 'Cerrado',    emoji: '🏁' },
+      }
+    case 'Cursos':
+      return {
+        processing: { label: 'En Curso',   emoji: '🎓' },
+        shipped:    { label: 'Completado', emoji: '🏆' },
+        completed:  { label: 'Cerrado',    emoji: '✅' },
+      }
+    default:
+      return {}
+  }
+}
+
+type StatusConfigEntry = { label: string; emoji: string; color: string; bg: string; border: string; headerBg: string; bar: string }
+type MutableStatusConfig = Record<keyof typeof STATUS_CONFIG, StatusConfigEntry>
+
+function getMergedStatusConfig(rubro?: string): MutableStatusConfig {
+  const overrides = getRubroLabels(rubro)
+  // Creamos una copia completamente mutable (sin as const)
+  const result: MutableStatusConfig = {
+    pending_payment: { ...STATUS_CONFIG.pending_payment },
+    confirmed:       { ...STATUS_CONFIG.confirmed },
+    processing:      { ...STATUS_CONFIG.processing },
+    shipped:         { ...STATUS_CONFIG.shipped },
+    completed:       { ...STATUS_CONFIG.completed },
+    cancelled:       { ...STATUS_CONFIG.cancelled },
+  }
+  for (const key of Object.keys(overrides) as Array<keyof typeof STATUS_CONFIG>) {
+    if (overrides[key]) {
+      result[key] = { ...result[key], ...overrides[key]! }
+    }
+  }
+  return result
 }
 
 // ============================================================
@@ -130,9 +183,10 @@ interface OrderCardProps {
   onConfirmPayment: (id: string) => Promise<void>
   isNew?: boolean
   compact?: boolean
+  rubro?: string
 }
 
-function OrderCard({ order, onUpdateStatus, onValidateTransfer, onConfirmPayment, isNew, compact }: OrderCardProps) {
+function OrderCard({ order, onUpdateStatus, onValidateTransfer, onConfirmPayment, isNew, compact, rubro }: OrderCardProps) {
   const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.cancelled
   const isUrgent = order.status !== 'completed' && order.status !== 'cancelled' && isOlderThan(order.created_at, 30)
 
@@ -255,6 +309,7 @@ function OrderCard({ order, onUpdateStatus, onValidateTransfer, onConfirmPayment
           onUpdateStatus={onUpdateStatus}
           onValidateTransfer={onValidateTransfer}
           onConfirmPayment={onConfirmPayment}
+          rubro={rubro}
         />
       </div>
     </div>
@@ -269,9 +324,10 @@ interface OrderActionsProps {
   onUpdateStatus: (id: string, status: Order['status']) => Promise<void>
   onValidateTransfer: (id: string) => Promise<void>
   onConfirmPayment: (id: string) => Promise<void>
+  rubro?: string
 }
 
-function OrderActions({ order, onUpdateStatus, onValidateTransfer, onConfirmPayment }: OrderActionsProps) {
+function OrderActions({ order, onUpdateStatus, onValidateTransfer, onConfirmPayment, rubro }: OrderActionsProps) {
   const [loading, setLoading] = useState(false)
 
   const handle = async (fn: () => Promise<void>) => {
@@ -301,6 +357,16 @@ function OrderActions({ order, onUpdateStatus, onValidateTransfer, onConfirmPaym
   }
 
   if (order.status === 'confirmed') {
+    // El label del botón depende del rubro
+    const processingLabel = (() => {
+      switch (rubro) {
+        case 'E-commerce': return 'Preparar Pedido 📦'
+        case 'iPhones': return 'Preparar Equipo 📦'
+        case 'Agencia': return 'Iniciar Proyecto ⚙️'
+        case 'Cursos': return 'Activar Alumno 🎓'
+        default: return 'Enviar a Cocina'
+      }
+    })()
     return (
       <button
         disabled={loading}
@@ -308,12 +374,21 @@ function OrderActions({ order, onUpdateStatus, onValidateTransfer, onConfirmPaym
         className="w-full py-1.5 text-[10px] font-bold bg-purple-600 text-white rounded-lg hover:bg-purple-500 transition-all shadow-md shadow-purple-600/10 flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
       >
         <Flame className="h-3 w-3" />
-        {loading ? '...' : 'Enviar a Cocina'}
+        {loading ? '...' : processingLabel}
       </button>
     )
   }
 
   if (order.status === 'processing') {
+    const shippedLabel = (() => {
+      switch (rubro) {
+        case 'E-commerce': return 'Marcar Enviado 🚚'
+        case 'iPhones': return 'Marcar Enviado 🚚'
+        case 'Agencia': return 'Marcar Entregado 📤'
+        case 'Cursos': return 'Marcar Completado 🏆'
+        default: return 'Marcar Enviado 🛵'
+      }
+    })()
     return (
       <button
         disabled={loading}
@@ -321,7 +396,7 @@ function OrderActions({ order, onUpdateStatus, onValidateTransfer, onConfirmPaym
         className="w-full py-1.5 text-[10px] font-bold bg-teal-600 text-white rounded-lg hover:bg-teal-500 transition-all shadow-md shadow-teal-600/10 flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
       >
         <Truck className="h-3 w-3" />
-        {loading ? 'Enviando mensaje...' : 'Marcar Enviado 🛵'}
+        {loading ? 'Actualizando...' : shippedLabel}
       </button>
     )
   }
@@ -375,7 +450,8 @@ function OrderActions({ order, onUpdateStatus, onValidateTransfer, onConfirmPaym
 // ============================================================
 // COMPONENTE PRINCIPAL
 // ============================================================
-export function RealtimeOrders({ businessId, initialOrders }: RealtimeOrdersProps) {
+export function RealtimeOrders({ businessId, initialOrders, rubro }: RealtimeOrdersProps) {
+  const statusConfig = getMergedStatusConfig(rubro)
   const supabase = createClient()
   const [orders, setOrders] = useState<Order[]>(initialOrders)
   const [dbConnected, setDbConnected] = useState(true)
@@ -731,7 +807,7 @@ export function RealtimeOrders({ businessId, initialOrders }: RealtimeOrdersProp
             <span className="ml-1 bg-zinc-800 px-1 py-0.5 rounded text-[9px]">{activeCount}</span>
           </button>
           {(['pending_payment', 'confirmed', 'processing', 'shipped', 'completed'] as const).map(status => {
-            const cfg = STATUS_CONFIG[status]
+            const cfg = statusConfig[status]
             const count = counters[status] || 0
             if (count === 0 && statusFilter !== status) return null
             return (
@@ -757,10 +833,12 @@ export function RealtimeOrders({ businessId, initialOrders }: RealtimeOrdersProp
         <div className="space-y-3">
           {filteredOrders.length === 0 ? (
             <div className="text-center py-16 text-zinc-600">
-              <div className="text-3xl mb-2">🍽️</div>
-              <p className="text-sm font-medium">Sin pedidos activos</p>
+              <div className="text-3xl mb-2">
+                {rubro === 'iPhones' ? '📱' : rubro === 'E-commerce' ? '📦' : rubro === 'Agencia' ? '💼' : rubro === 'Cursos' ? '🎓' : '🍽️'}
+              </div>
+              <p className="text-sm font-medium">Sin {rubro === 'Agencia' ? 'proyectos' : rubro === 'Cursos' ? 'inscripciones' : 'pedidos'} activos</p>
               <p className="text-xs text-zinc-700 mt-1">
-                {searchQuery ? 'Ningún pedido coincide con la búsqueda' : 'Los pedidos del bot aparecerán acá en tiempo real'}
+                {searchQuery ? 'Ninguno coincide con la búsqueda' : 'Las operaciones del bot aparecerán acá en tiempo real'}
               </p>
             </div>
           ) : (
@@ -774,6 +852,7 @@ export function RealtimeOrders({ businessId, initialOrders }: RealtimeOrdersProp
                     onValidateTransfer={handleValidateTransfer}
                     onConfirmPayment={handleConfirmPayment}
                     isNew={newOrderIds.has(order.id)}
+                    rubro={rubro}
                   />
                 ))}
               </div>
@@ -795,7 +874,7 @@ export function RealtimeOrders({ businessId, initialOrders }: RealtimeOrdersProp
       {viewMode === 'kanban' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 items-start">
           {KANBAN_COLUMNS.map(colStatus => {
-            const cfg = STATUS_CONFIG[colStatus]
+            const cfg = statusConfig[colStatus]
             const colOrders = filteredOrders.filter(o => o.status === colStatus)
 
             return (
@@ -824,6 +903,7 @@ export function RealtimeOrders({ businessId, initialOrders }: RealtimeOrdersProp
                         onConfirmPayment={handleConfirmPayment}
                         isNew={newOrderIds.has(order.id)}
                         compact
+                        rubro={rubro}
                       />
                     ))
                   )}

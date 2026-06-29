@@ -12,6 +12,10 @@ import {
   Bot,
   Settings,
   MessageCircle,
+  Smartphone,
+  Briefcase,
+  BookOpen,
+  ShoppingCart,
 } from 'lucide-react'
 
 interface MobileNavProps {
@@ -20,18 +24,49 @@ interface MobileNavProps {
   enabledModules?: string[]
 }
 
+function getCrmMobileItem(businessId: string, rubro?: string) {
+  switch (rubro) {
+    case 'iPhones':    return { id: 'crm', name: 'Ventas',    href: `/dashboard/${businessId}`,         icon: Smartphone,    exact: true }
+    case 'E-commerce': return { id: 'crm', name: 'Ventas',    href: `/dashboard/${businessId}`,         icon: ShoppingCart,  exact: true }
+    case 'Agencia':    return { id: 'crm', name: 'Proyectos', href: `/dashboard/${businessId}`,         icon: Briefcase,     exact: true }
+    case 'Cursos':     return { id: 'crm', name: 'Inscripc.', href: `/dashboard/${businessId}`,         icon: BookOpen,      exact: true }
+    default:           return { id: 'crm', name: 'Pedidos',   href: `/dashboard/${businessId}`,         icon: LayoutDashboard, exact: true }
+  }
+}
+
+function getCatalogMobileLabel(rubro?: string): string {
+  switch (rubro) {
+    case 'iPhones':    return 'Equipos'
+    case 'E-commerce': return 'Catálogo'
+    case 'Cursos':     return 'Cursos'
+    case 'Agencia':
+    case 'Médico':
+    case 'Peluquería':
+    case 'Gym':
+    case 'Hotel':
+    case 'Automotriz':
+    case 'Servicios':  return 'Servicios'
+    case 'Comida':     return 'Menú'
+    default:           return 'Catálogo'
+  }
+}
+
+function getAgendaMobileLabel(rubro?: string): string {
+  switch (rubro) {
+    case 'Hotel':      return 'Reservas'
+    case 'Médico':     return 'Turnos'
+    case 'Gym':        return 'Clases'
+    default:           return 'Agenda'
+  }
+}
+
 export function MobileNav({ businessId, rubro = 'Personalizado', enabledModules = [] }: MobileNavProps) {
   const pathname = usePathname()
 
-  // Los 5 ítems más importantes para mobile (según módulos activos)
+  const crmItem = getCrmMobileItem(businessId, rubro)
+
   const allItems = [
-    {
-      id: 'crm',
-      name: 'Pedidos',
-      href: `/dashboard/${businessId}`,
-      icon: LayoutDashboard,
-      exact: true,
-    },
+    crmItem,
     {
       id: 'chat',
       name: 'Chat',
@@ -40,7 +75,7 @@ export function MobileNav({ businessId, rubro = 'Personalizado', enabledModules 
     },
     {
       id: 'agenda',
-      name: 'Agenda',
+      name: getAgendaMobileLabel(rubro),
       href: `/dashboard/${businessId}/agenda`,
       icon: Calendar,
     },
@@ -52,7 +87,7 @@ export function MobileNav({ businessId, rubro = 'Personalizado', enabledModules 
     },
     {
       id: 'catalog',
-      name: rubro === 'Agencia' || rubro === 'Servicios' || rubro === 'Médico' ? 'Servicios' : 'Catálogo',
+      name: getCatalogMobileLabel(rubro),
       href: `/dashboard/${businessId}/products`,
       icon: Package,
     },

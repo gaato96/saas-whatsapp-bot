@@ -320,9 +320,23 @@ export default function ProductsPage({ params }: ProductsPageProps) {
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-xl font-bold text-white">Catálogo / Menú</h1>
+          <h1 className="text-xl font-bold text-white">
+            {rubro === 'iPhones'    ? 'Inventario de Equipos'
+            : rubro === 'E-commerce' ? 'Catálogo e Inventario'
+            : rubro === 'Cursos'     ? 'Cursos y Programas'
+            : rubro === 'Agencia'    ? 'Servicios y Propuestas'
+            : rubro === 'Médico' || rubro === 'Peluquería' || rubro === 'Gym' || rubro === 'Hotel' || rubro === 'Automotriz' || rubro === 'Servicios' ? 'Servicios'
+            : rubro === 'Comida'     ? 'Menú'
+            : 'Catálogo / Stock'}
+          </h1>
           <p className="text-xs text-zinc-500">
-            El bot de WhatsApp lee estos ítems en tiempo real para responder consultas y tomar pedidos.
+            {rubro === 'iPhones'
+              ? 'El bot lee estos equipos en tiempo real para asesorar y vender. Precios en USD.'
+              : rubro === 'Cursos'
+              ? 'El bot lee estos cursos para responder consultas y tomar inscripciones.'
+              : rubro === 'Agencia'
+              ? 'El bot lee estos servicios para cotizar y cerrar propuestas.'
+              : 'El bot de WhatsApp lee estos ítems en tiempo real para responder consultas y tomar pedidos.'}
           </p>
         </div>
         <div className="flex gap-4 items-center flex-wrap">
@@ -332,19 +346,22 @@ export default function ProductsPage({ params }: ProductsPageProps) {
             </div>
           )}
           <div className="flex gap-2">
-            <button
-              onClick={() => setActiveView(activeView === 'import' ? 'catalog' : 'import')}
-              className={`rounded-xl px-4 py-2.5 text-xs font-bold border transition-all flex items-center gap-1.5 ${activeView === 'import' ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-600/10' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20'}`}
-            >
-              <FileText className="h-3.5 w-3.5" />
-              Cargar Menú Completo
-            </button>
+            {/* Cargar Menú Completo SOLO para Comida */}
+            {rubro === 'Comida' && (
+              <button
+                onClick={() => setActiveView(activeView === 'import' ? 'catalog' : 'import')}
+                className={`rounded-xl px-4 py-2.5 text-xs font-bold border transition-all flex items-center gap-1.5 ${activeView === 'import' ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-600/10' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20'}`}
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Cargar Menú Completo
+              </button>
+            )}
             <button
               onClick={() => setActiveView(activeView === 'add' ? 'catalog' : 'add')}
               className={`rounded-xl px-4 py-2.5 text-xs font-bold border transition-all flex items-center gap-1.5 ${activeView === 'add' ? 'bg-purple-600 border-purple-500 text-white' : 'bg-purple-500/10 border-purple-500/20 text-purple-400 hover:bg-purple-500/20'}`}
             >
               <Plus className="h-3.5 w-3.5" />
-              Agregar Uno
+              {rubro === 'iPhones' ? 'Agregar Equipo' : rubro === 'Cursos' ? 'Agregar Curso' : rubro === 'Agencia' ? 'Agregar Servicio' : 'Agregar Ítem'}
             </button>
           </div>
         </div>
@@ -354,8 +371,8 @@ export default function ProductsPage({ params }: ProductsPageProps) {
         <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-xs">❌ {errorMsg}</div>
       )}
 
-      {/* ─── PANEL: IMPORTAR MENÚ COMPLETO ─── */}
-      {activeView === 'import' && (
+      {/* ─── PANEL: IMPORTAR MENÚ COMPLETO (solo Comida) ─── */}
+      {activeView === 'import' && rubro === 'Comida' && (
         <div className="p-6 border border-emerald-500/20 bg-zinc-950 rounded-2xl space-y-5 shadow-md shadow-emerald-500/5">
           <div>
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
@@ -561,12 +578,20 @@ export default function ProductsPage({ params }: ProductsPageProps) {
         </form>
       )}
 
-      {/* ─── TABLA DEL CATÁLOGO ─── */}
+{/* ─── TABLA DEL CATÁLOGO ─── */}
       <div className="border border-zinc-900 bg-zinc-950 rounded-2xl overflow-hidden shadow-sm">
         <div className="p-4 border-b border-zinc-900 bg-zinc-950/60 flex items-center justify-between">
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">Ítems en el Catálogo</span>
-            <span className="ml-3 text-[10px] text-zinc-600">{products.length} ítem{products.length !== 1 ? 's' : ''} total</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+              {rubro === 'iPhones'    ? 'Equipos en Inventario'
+              : rubro === 'Cursos'    ? 'Cursos Disponibles'
+              : rubro === 'Agencia'   ? 'Servicios y Propuestas'
+              : rubro === 'Comida'    ? 'Menú'
+              : 'Ítems en el Catálogo'}
+            </span>
+            <span className="ml-3 text-[10px] text-zinc-600">
+              {products.length} {rubro === 'iPhones' ? 'equipo' : rubro === 'Cursos' ? 'curso' : rubro === 'Agencia' ? 'servicio' : 'ítem'}{products.length !== 1 ? 's' : ''} total
+            </span>
           </div>
           <span className="text-[10px] text-zinc-600">Click en el precio para editarlo inline</span>
         </div>
@@ -575,20 +600,31 @@ export default function ProductsPage({ params }: ProductsPageProps) {
             <div className="text-center py-20 text-xs text-zinc-500">Cargando catálogo...</div>
           ) : products.length === 0 ? (
             <div className="text-center py-20 space-y-3">
-              <p className="text-xs text-zinc-600">No hay ítems en el catálogo todavía.</p>
+              <p className="text-xs text-zinc-600">
+                {rubro === 'iPhones' ? 'No hay equipos en el inventario todavía.'
+                : rubro === 'Cursos' ? 'No hay cursos cargados todavía.'
+                : rubro === 'Agencia' ? 'No hay servicios cargados todavía.'
+                : 'No hay ítems en el catálogo todavía.'}
+              </p>
               <div className="flex justify-center gap-2">
-                <button onClick={() => setActiveView('import')} className="text-[11px] text-emerald-400 hover:text-emerald-300 underline transition-colors">Cargar menú completo</button>
-                <span className="text-zinc-700 text-[11px]">o</span>
-                <button onClick={() => setActiveView('add')} className="text-[11px] text-purple-400 hover:text-purple-300 underline transition-colors">agregar uno por uno</button>
+                {rubro === 'Comida' && (
+                  <>
+                    <button onClick={() => setActiveView('import')} className="text-[11px] text-emerald-400 hover:text-emerald-300 underline transition-colors">Cargar menú completo</button>
+                    <span className="text-zinc-700 text-[11px]">o</span>
+                  </>
+                )}
+                <button onClick={() => setActiveView('add')} className="text-[11px] text-purple-400 hover:text-purple-300 underline transition-colors">
+                  {rubro === 'iPhones' ? 'Agregar equipo' : rubro === 'Cursos' ? 'Agregar curso' : rubro === 'Agencia' ? 'Agregar servicio' : 'agregar uno por uno'}
+                </button>
               </div>
             </div>
           ) : (
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-zinc-900 text-[10px] uppercase tracking-wider text-zinc-500 bg-zinc-950 font-semibold">
-                  <th className="px-6 py-4">Nombre</th>
-                  <th className="px-6 py-4">Categoría / Descripción</th>
-                  <th className="px-6 py-4 text-center w-36">Precio ($)</th>
+                  <th className="px-6 py-4">{rubro === 'iPhones' ? 'Modelo' : 'Nombre'}</th>
+                  <th className="px-6 py-4">{rubro === 'iPhones' ? 'Detalles del Equipo' : 'Categoría / Descripción'}</th>
+                  <th className="px-6 py-4 text-center w-36">{rubro === 'iPhones' ? 'Precio (USD)' : 'Precio ($)'}</th>
                   <th className="px-6 py-4 text-center w-28">Visible en bot</th>
                   <th className="px-6 py-4 text-right w-24">Acciones</th>
                 </tr>

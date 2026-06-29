@@ -12,6 +12,10 @@ import {
   Bot,
   Settings,
   MessageCircle,
+  Smartphone,
+  Briefcase,
+  BookOpen,
+  ShoppingCart,
 } from 'lucide-react'
 
 interface DashboardNavProps {
@@ -20,18 +24,60 @@ interface DashboardNavProps {
   enabledModules?: string[]
 }
 
+// ── Nombres y íconos de módulos según rubro ───────────────────────────────────
+function getCrmLabel(rubro?: string): { name: string; icon: typeof LayoutDashboard } {
+  switch (rubro) {
+    case 'iPhones':    return { name: 'Ventas en Tiempo Real', icon: Smartphone }
+    case 'E-commerce': return { name: 'Ventas en Tiempo Real', icon: ShoppingCart }
+    case 'Agencia':    return { name: 'Proyectos y Consultas', icon: Briefcase }
+    case 'Cursos':     return { name: 'Inscripciones',          icon: BookOpen }
+    default:           return { name: 'Pedidos en Tiempo Real', icon: LayoutDashboard }
+  }
+}
+
+function getAgendaLabel(rubro?: string): string {
+  switch (rubro) {
+    case 'Peluquería':  return 'Agenda de Turnos'
+    case 'Gym':         return 'Clases y Turnos'
+    case 'Médico':      return 'Turnos Médicos'
+    case 'Hotel':       return 'Reservas'
+    case 'Automotriz':  return 'Agenda de Taller'
+    case 'Servicios':   return 'Agenda de Turnos'
+    default:            return 'Agenda / Reservas'
+  }
+}
+
+function getCatalogLabel(rubro?: string): string {
+  switch (rubro) {
+    case 'iPhones':     return 'Inventario de Equipos'
+    case 'E-commerce':  return 'Catálogo e Inventario'
+    case 'Cursos':      return 'Cursos y Programas'
+    case 'Agencia':     return 'Servicios y Propuestas'
+    case 'Médico':
+    case 'Peluquería':
+    case 'Gym':
+    case 'Hotel':
+    case 'Automotriz':
+    case 'Servicios':   return 'Servicios'
+    case 'Comida':      return 'Menú'
+    default:            return 'Catálogo y Stock'
+  }
+}
+
 export function DashboardNav({ businessId, rubro = 'Personalizado', enabledModules = [] }: DashboardNavProps) {
   const pathname = usePathname()
 
   const getEnabledModules = () => {
     if (enabledModules && enabledModules.length > 0) return enabledModules
-    if (rubro === 'Comida' || rubro === 'E-commerce' || rubro === 'Cursos') {
+    if (rubro === 'Comida' || rubro === 'E-commerce' || rubro === 'Cursos' || rubro === 'iPhones') {
       return ['chat', 'clients', 'ai_config', 'business_config', 'whatsapp_config', 'crm', 'catalog']
     }
     return ['chat', 'clients', 'ai_config', 'business_config', 'whatsapp_config', 'agenda', 'catalog']
   }
 
   const activeModules = getEnabledModules()
+  const crmCfg = getCrmLabel(rubro)
+  const CrmIcon = crmCfg.icon
 
   const sections = [
     {
@@ -39,9 +85,9 @@ export function DashboardNav({ businessId, rubro = 'Personalizado', enabledModul
       items: [
         {
           id: 'crm',
-          name: 'Pedidos en Tiempo Real',
+          name: crmCfg.name,
           href: `/dashboard/${businessId}`,
-          icon: LayoutDashboard,
+          icon: CrmIcon,
           exact: true,
         },
         {
@@ -52,7 +98,7 @@ export function DashboardNav({ businessId, rubro = 'Personalizado', enabledModul
         },
         {
           id: 'agenda',
-          name: 'Agenda / Reservas',
+          name: getAgendaLabel(rubro),
           href: `/dashboard/${businessId}/agenda`,
           icon: Calendar,
         },
@@ -63,15 +109,13 @@ export function DashboardNav({ businessId, rubro = 'Personalizado', enabledModul
       items: [
         {
           id: 'clients',
-          name: 'Contactos Frecuentes',
+          name: 'Contactos',
           href: `/dashboard/${businessId}/clientes`,
           icon: Users,
         },
         {
           id: 'catalog',
-          name: rubro === 'Agencia' || rubro === 'Servicios' || rubro === 'Médico'
-            ? 'Servicios y Ofertas'
-            : 'Catálogo y Stock',
+          name: getCatalogLabel(rubro),
           href: `/dashboard/${businessId}/products`,
           icon: Package,
         },
