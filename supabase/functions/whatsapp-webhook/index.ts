@@ -3,16 +3,14 @@
 // CENTRAL MULTI-TENANT WEBHOOK FOR WHATSAPP CLOUD API & GOOGLE GEMINI
 // =========================================================================
 
-// Modelos de Gemini en orden de prioridad — SOLO modelos confirmados en la API de Google.
-// Si el principal se satura (503/429/404), se pasa automáticamente al siguiente.
-// IMPORTANTE: NO agregar modelos inventados — causan 404 y lentifican el fallback.
+// Modelos de Gemini en orden de prioridad — fallback automático ante 503/429/404.
 const GEMINI_MODELS = [
-  "gemini-2.5-flash",        // Principal: más rápido y capaz de la familia 2.5
-  "gemini-2.5-flash-lite",   // Fallback 1: más económico y rápido, ideal para consultas de alto volumen
-  "gemini-2.0-flash",        // Fallback 2: generación anterior, muy estable
-  "gemini-1.5-flash",        // Fallback 3: probado y confiable
-  "gemini-1.5-flash-8b",     // Fallback 4: más liviano, ideal para saturación máxima
+  "gemini-3.5-flash",        // Principal: modelo más reciente y capaz
+  "gemini-3.1-flash-lite",   // Fallback 1: rápido y eficiente en costos
+  "gemini-2.5-flash",        // Fallback 2: alta velocidad y estabilidad
+  "gemini-2.5-flash-lite",   // Fallback 3: opción más rápida y económica
 ]
+
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
