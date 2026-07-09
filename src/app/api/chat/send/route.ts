@@ -54,6 +54,8 @@ export async function POST(req: Request) {
     }
 
     console.log(`Enviando mensaje de agente a WhatsApp: ${session.customer_phone}`)
+    const waController = new AbortController()
+    const waTimeout = setTimeout(() => waController.abort(), 8000)
     const waResponse = await fetch(waSendUrl, {
       method: 'POST',
       headers: {
@@ -61,7 +63,9 @@ export async function POST(req: Request) {
         Authorization: `Bearer ${access_token}`,
       },
       body: JSON.stringify(waPayload),
+      signal: waController.signal,
     })
+    clearTimeout(waTimeout)
 
     if (!waResponse.ok) {
       const waErrText = await waResponse.text()

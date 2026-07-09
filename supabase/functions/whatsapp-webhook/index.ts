@@ -3,18 +3,18 @@
 // CENTRAL MULTI-TENANT WEBHOOK FOR WHATSAPP CLOUD API & GOOGLE GEMINI
 // =========================================================================
 
-// Modelos de Gemini en orden de prioridad — SOLO modelos confirmados como existentes en la API de Google.
+// Modelos de Gemini en orden de prioridad — SOLO modelos confirmados en la API de Google.
 // Si el principal se satura (503/429/404), se pasa automáticamente al siguiente.
-// IMPORTANTE: NO agregar modelos inventados (ej: gemini-3.x) — causan 404 y lentifican el fallback.
+// IMPORTANTE: NO agregar modelos inventados — causan 404 y lentifican el fallback.
 const GEMINI_MODELS = [
-  "gemini-2.5-flash",         // Principal: más inteligente y rápido del tier gratuito
-  "gemini-2.5-flash-lite-preview-06-17", // Fallback 1: versión lite verificada del 2.5
-  "gemini-2.0-flash",         // Fallback 2: generación anterior, muy estable
-  "gemini-1.5-flash",         // Fallback 3: estable y probado
-  "gemini-1.5-flash-8b",      // Fallback 4: más liviano, ideal para saturación
+  "gemini-2.5-flash",        // Principal: más rápido y capaz de la familia 2.5
+  "gemini-2.5-flash-lite",   // Fallback 1: más económico y rápido, ideal para consultas de alto volumen
+  "gemini-2.0-flash",        // Fallback 2: generación anterior, muy estable
+  "gemini-1.5-flash",        // Fallback 3: probado y confiable
+  "gemini-1.5-flash-8b",     // Fallback 4: más liviano, ideal para saturación máxima
 ]
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 // Helper: llama a Gemini con fallback automático entre modelos si alguno está sobrecargado (503/429)
@@ -69,17 +69,18 @@ async function callGeminiWithFallback(body: object, apiKey: string, timeoutMs = 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || ""
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
 
-// API KEY centralizada de Google Gemini 2.5 Flash
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || 
-  (typeof process !== "undefined" ? (process.env as any)?.GEMINI_API_KEY : "") || 
-  "";
+// API KEY de Google Gemini — falla rápido si no está configurada
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || ""
+if (!GEMINI_API_KEY) {
+  console.error("[FATAL] GEMINI_API_KEY no está configurada. El bot no podrá responder.")
+}
 
 // Inicializar Supabase con privilegios administrativos
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-// CORS headers para llamadas desde el navegador (si aplica)
+// CORS headers — restringido al dominio de la app
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": Deno.env.get("APP_URL") || "https://chatbot-ia.vercel.app",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 }
 
