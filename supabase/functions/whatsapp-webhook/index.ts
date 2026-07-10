@@ -83,6 +83,103 @@ const corsHeaders = {
 }
 
 /**
+ * Función auxiliar para reparar cadenas JSON mal formadas o incompletas (por ej. si se recortaron).
+ * Cierra comillas, llaves y corchetes pendientes en el orden correspondiente.
+ */
+function repairJsonString(badJson: string): string {
+  let insideString = false;
+  let escaped = false;
+  const stack: string[] = [];
+  let repaired = "";
+
+  for (let i = 0; i < badJson.length; i++) {
+    const char = badJson[i];
+    repaired += char;
+
+    if (char === '"' && !escaped) {
+      insideString = !insideString;
+    }
+
+    if (char === '\\' && insideString) {
+      escaped = !escaped;
+    } else {
+      escaped = false;
+    }
+
+    if (!insideString) {
+      if (char === '{' || char === '[') {
+        stack.push(char);
+      } else if (char === '}' || char === ']') {
+        const expected = char === '}' ? '{' : '[';
+        if (stack[stack.length - 1] === expected) {
+          stack.pop();
+        }
+      }
+    }
+  }
+
+  // Si nos quedamos dentro de un string al final, cerramos la comilla doble
+  if (insideString) {
+    repaired += '"';
+  }
+
+  // Cerrar los bloques abiertos pendientes en orden inverso
+  while (stack.length > 0) {
+    const open = stack.pop();
+    if (open === '{') {
+      repaired += '}';
+    } else if (open === '[') {
+      repaired += ']';
+    }
+  }
+
+  return repaired;
+}
+
+/**
+ * Función auxiliar para extraer el tag de orden [ORDER_JSON: ...], repararlo si está incompleto,
+ * y limpiar el mensaje final del usuario de cualquier rastro del tag.
+ */
+function extractAndCleanOrderTag(message: string): { cleanedMessage: string, orderData: any } {
+  let cleanedMessage = message;
+  let orderData = null;
+  
+  const orderStartIndex = message.indexOf("[ORDER_JSON:");
+  if (orderStartIndex !== -1) {
+    console.log("[ZAPFLOW] Se detectó etiqueta de orden en el mensaje.");
+    const rawOrderPart = message.slice(orderStartIndex);
+    
+    // Limpiar inmediatamente el mensaje de cara al usuario
+    cleanedMessage = message.slice(0, orderStartIndex).trim();
+
+    // Intentar extraer y parsear el JSON
+    const jsonStartIndex = rawOrderPart.indexOf("{");
+    if (jsonStartIndex !== -1) {
+      let jsonString = rawOrderPart.slice(jsonStartIndex);
+      
+      // Quitar el corchete de cierre de la etiqueta si existe
+      const bracketCloseIndex = jsonString.lastIndexOf("]");
+      if (bracketCloseIndex !== -1) {
+        jsonString = jsonString.slice(0, bracketCloseIndex);
+      }
+      
+      // Reparar posibles errores de cierre (como comillas, llaves y corchetes)
+      const repairedJson = repairJsonString(jsonString.trim());
+      console.log("[ZAPFLOW] JSON reparado para parsear:", repairedJson);
+
+      try {
+        orderData = JSON.parse(repairedJson);
+      } catch (jsonErr) {
+        console.error("[ZAPFLOW] Error parseando JSON en extractAndCleanOrderTag:", jsonErr, "JSON original:", jsonString);
+      }
+    }
+  }
+  
+  return { cleanedMessage, orderData };
+}
+
+
+/**
  * Inyecta las reglas del rubro, configuración del negocio y catálogo con stock.
  */
 function buildSystemPrompt(businessName: string, rubro: string, rubroConfig: any, products: any[], localTimeStr: string, dolarBlueRate?: number | null) {
@@ -906,19 +1003,10 @@ serve(async (req) => {
           userFacingMessage = userFacingMessage.replace("[HUMAN_REQUIRED]", "").trim()
         }
 
-        // Evaluar si la IA generó una etiqueta de orden cerrada
-        const orderJsonRegex = /\[ORDER_JSON:\s*({[\s\S]*})\s*\]/
-        const match = userFacingMessage.match(orderJsonRegex)
-        if (match) {
-          try {
-            orderToCreate = JSON.parse(match[1])
-            // Remover la etiqueta cruda del mensaje que va al cliente de WhatsApp
-            userFacingMessage = userFacingMessage.replace(orderJsonRegex, "").trim()
-            console.log(`Orden parseada con éxito para procesar:`, orderToCreate)
-          } catch (jsonErr) {
-            console.error("Error parseando etiqueta de orden JSON de Gemini:", jsonErr)
-          }
-        }
+        // Evaluar si la IA generó una etiqueta de orden (completa o incompleta)
+        const parsedOrder = extractAndCleanOrderTag(userFacingMessage);
+        userFacingMessage = parsedOrder.cleanedMessage;
+        orderToCreate = parsedOrder.orderData;
 
         // Si hay una orden, ejecutar el checkout transaccional en la DB
         if (orderToCreate) {
@@ -1015,7 +1103,8 @@ serve(async (req) => {
 
               console.log("Invocando re-evaluación en Gemini por error de stock...")
               const correctedAiResponse = await callGemini(correctedContents)
-              userFacingMessage = correctedAiResponse.replace(orderJsonRegex, "").replace("[HUMAN_REQUIRED]", "").trim()
+              const { cleanedMessage: correctedCleaned } = extractAndCleanOrderTag(correctedAiResponse)
+              userFacingMessage = correctedCleaned.replace("[HUMAN_REQUIRED]", "").trim()
               console.log("Respuesta corregida de Gemini:", userFacingMessage)
             } else {
               console.log(`Pedido creado exitosamente con ID: ${checkoutResult.order_id}`)
