@@ -1,6 +1,6 @@
-'use client'
+﻿'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -16,6 +16,9 @@ import {
   Briefcase,
   BookOpen,
   ShoppingCart,
+  BarChart2,
+  Menu,
+  X
 } from 'lucide-react'
 
 interface MobileNavProps {
@@ -62,6 +65,7 @@ function getAgendaMobileLabel(rubro?: string): string {
 
 export function MobileNav({ businessId, rubro = 'Personalizado', enabledModules = [] }: MobileNavProps) {
   const pathname = usePathname()
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const crmItem = getCrmMobileItem(businessId, rubro)
 
@@ -72,6 +76,12 @@ export function MobileNav({ businessId, rubro = 'Personalizado', enabledModules 
       name: 'Chat',
       href: `/dashboard/${businessId}/chat`,
       icon: MessageSquare,
+    },
+    {
+      id: 'crm_premium',
+      name: 'CRM Premium',
+      href: `/dashboard/${businessId}/crm`,
+      icon: BarChart2,
     },
     {
       id: 'agenda',
@@ -111,8 +121,9 @@ export function MobileNav({ businessId, rubro = 'Personalizado', enabledModules 
     },
   ].filter(item => enabledModules.includes(item.id))
 
-  // Mostrar máximo 5 en la bottom nav
-  const navItems = allItems.slice(0, 5)
+  const showMore = allItems.length > 5
+  const navItems = showMore ? allItems.slice(0, 4) : allItems
+  const moreItems = showMore ? allItems.slice(4) : []
 
   const isActive = (item: { href: string; exact?: boolean }) => {
     if (item.exact) return pathname === item.href
@@ -122,34 +133,94 @@ export function MobileNav({ businessId, rubro = 'Personalizado', enabledModules 
   if (navItems.length === 0) return null
 
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-zinc-950/95 backdrop-blur-lg border-t border-zinc-800 safe-bottom">
-      <div className="flex items-center justify-around px-2 py-2">
-        {navItems.map((item) => {
-          const Icon = item.icon
-          const active = isActive(item)
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
+    <>
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-zinc-950/95 backdrop-blur-lg border-t border-zinc-850 safe-bottom">
+        <div className="flex items-center justify-around px-2 py-2">
+          {navItems.map((item) => {
+            const Icon = item.icon
+            const active = isActive(item)
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all min-w-[52px] ${
+                  active
+                    ? 'text-emerald-400'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                <div className={`relative p-1.5 rounded-lg ${active ? 'bg-emerald-500/15' : ''}`}>
+                  <Icon className={`h-5 w-5 ${active ? 'text-emerald-400' : 'text-zinc-500'}`} />
+                  {active && (
+                    <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-emerald-400" />
+                  )}
+                </div>
+                <span className={`text-[9px] font-bold tracking-wide ${active ? 'text-emerald-400' : 'text-zinc-650'}`}>
+                  {item.name}
+                </span>
+              </Link>
+            )
+          })}
+
+          {showMore && (
+            <button
+              onClick={() => setMenuOpen(true)}
               className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all min-w-[52px] ${
-                active
+                menuOpen
                   ? 'text-emerald-400'
                   : 'text-zinc-500 hover:text-zinc-300'
               }`}
             >
-              <div className={`relative p-1.5 rounded-lg ${active ? 'bg-emerald-500/15' : ''}`}>
-                <Icon className={`h-5 w-5 ${active ? 'text-emerald-400' : 'text-zinc-500'}`} />
-                {active && (
-                  <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-emerald-400" />
-                )}
+              <div className={`relative p-1.5 rounded-lg ${menuOpen ? 'bg-emerald-500/15' : ''}`}>
+                <Menu className={`h-5 w-5 ${menuOpen ? 'text-emerald-400' : 'text-zinc-500'}`} />
               </div>
-              <span className={`text-[9px] font-bold tracking-wide ${active ? 'text-emerald-400' : 'text-zinc-600'}`}>
-                {item.name}
+              <span className={`text-[9px] font-bold tracking-wide ${menuOpen ? 'text-emerald-400' : 'text-zinc-650'}`}>
+                Menú
               </span>
-            </Link>
-          )
-        })}
-      </div>
-    </nav>
+            </button>
+          )}
+        </div>
+      </nav>
+
+      {/* Bottom Sheet Drawer */}
+      {menuOpen && (
+        <div className="fixed inset-0 z-50 flex items-end lg:hidden">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMenuOpen(false)} />
+          <div className="relative w-full bg-zinc-950 border-t border-zinc-800 rounded-t-3xl p-5 pb-8 animate-in slide-in-from-bottom duration-250">
+            <div className="w-12 h-1 bg-zinc-850 rounded-full mx-auto mb-4" />
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Módulos habilitados</span>
+              <button 
+                onClick={() => setMenuOpen(false)} 
+                className="p-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {moreItems.map((item) => {
+                const Icon = item.icon
+                const active = isActive(item)
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMenuOpen(false)}
+                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all ${
+                      active
+                        ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400 font-bold'
+                        : 'bg-zinc-900/40 border-zinc-900/60 text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    <Icon className="h-5 w-5 mb-1.5" />
+                    <span className="text-[10px] font-bold leading-tight">{item.name}</span>
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }

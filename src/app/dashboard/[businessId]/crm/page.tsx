@@ -312,7 +312,7 @@ export default function CRMPage({ params }: CRMPageProps) {
     <div className="space-y-6 font-sans">
 
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-white flex items-center gap-2">
             <BarChart2 className="h-5 w-5 text-emerald-500" />
@@ -322,17 +322,18 @@ export default function CRMPage({ params }: CRMPageProps) {
             Vista 360° de clientes, segmentación automática y broadcast masivo.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-zinc-800 text-xs text-zinc-400 hover:text-white hover:border-zinc-600 transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-zinc-800 text-xs text-zinc-400 hover:text-white hover:border-zinc-600 transition-all cursor-pointer min-h-[36px]"
           >
             <Download className="h-3.5 w-3.5" />
-            Exportar CSV
+            <span className="hidden sm:inline">Exportar CSV</span>
+            <span className="sm:hidden">CSV</span>
           </button>
           <button
             onClick={() => setBroadcastOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs text-white font-semibold transition-all cursor-pointer shadow-lg shadow-emerald-600/20"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs text-white font-semibold transition-all cursor-pointer shadow-lg shadow-emerald-600/20 min-h-[36px]"
           >
             <Megaphone className="h-3.5 w-3.5" />
             Broadcast
@@ -369,8 +370,9 @@ export default function CRMPage({ params }: CRMPageProps) {
       )}
 
       {/* Segmentos + Búsqueda */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-        <div className="flex items-center gap-2 flex-wrap">
+      <div className="space-y-3">
+        {/* Filter chips — horizontal scroll on mobile */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
           {(['todos', 'vip', 'recurrente', 'nuevo', 'inactivo'] as const).map(seg => {
             const cfg = seg === 'todos' ? null : SEGMENT_CONFIG[seg]
             const count = seg === 'todos' ? customers.length : customers.filter(c => c.segment === seg).length
@@ -378,7 +380,7 @@ export default function CRMPage({ params }: CRMPageProps) {
               <button
                 key={seg}
                 onClick={() => setActiveSegment(seg)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[11px] font-semibold transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-[11px] font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 min-h-[36px] ${
                   activeSegment === seg
                     ? seg === 'todos'
                       ? 'bg-white/10 border-white/20 text-white'
@@ -393,21 +395,21 @@ export default function CRMPage({ params }: CRMPageProps) {
             )
           })}
         </div>
-
-        <div className="relative ml-auto w-full sm:w-56">
+        {/* Search */}
+        <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
           <input
             type="text"
             placeholder="Buscar cliente..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-zinc-900/40 border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-600 focus:border-emerald-500 focus:outline-none"
+            className="w-full pl-9 pr-3 py-2.5 bg-zinc-900/40 border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-600 focus:border-emerald-500 focus:outline-none"
           />
         </div>
       </div>
 
-      {/* Tabla de clientes */}
-      <div className="bg-zinc-950/20 border border-zinc-800 rounded-2xl overflow-hidden">
+      {/* Tabla de clientes (Solo Desktop) */}
+      <div className="hidden md:block bg-zinc-950/20 border border-zinc-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
@@ -516,11 +518,53 @@ export default function CRMPage({ params }: CRMPageProps) {
         </div>
       </div>
 
-      {/* ── Panel lateral Vista 360° ── */}
+      {/* ── Tarjetas mobile (Solo Mobile) ── */}
+      <div className="md:hidden space-y-3">
+        {filtered.length === 0 ? (
+          <div className="text-center py-12 text-zinc-600 text-xs">No hay clientes con ese filtro.</div>
+        ) : filtered.map(c => {
+          const seg = SEGMENT_CONFIG[c.segment]
+          const SegIcon = seg.icon
+          return (
+            <button
+              key={c.phone}
+              onClick={() => setSelectedCustomer(c)}
+              className="w-full text-left bg-zinc-950/40 border border-zinc-800 rounded-2xl p-4 flex items-center gap-3 hover:border-zinc-700 transition-all active:scale-[0.98]"
+            >
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center shrink-0">
+                <span className="text-sm font-black text-white">
+                  {(c.nickname || c.name).charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-bold text-sm text-white truncate">{c.nickname || c.name}</p>
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[9px] font-bold shrink-0 ${seg.bg} ${seg.border} ${seg.color}`}>
+                    <SegIcon className="h-2.5 w-2.5" />
+                    {seg.label}
+                  </span>
+                </div>
+                <p className="text-[10px] text-zinc-500 mt-0.5">{c.phone}</p>
+                <div className="flex items-center gap-3 mt-1.5">
+                  <span className="text-[10px] text-zinc-400"><span className="font-bold text-emerald-400">${c.ltv.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</span> LTV</span>
+                  <span className="text-[10px] text-zinc-500">{c.totalOrders} pedidos</span>
+                  {c.isOpenWindow && <span className="text-[10px] text-emerald-400 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block" />Ventana abierta</span>}
+                </div>
+              </div>
+              <ChevronRight className="h-4 w-4 text-zinc-600 shrink-0" />
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ── Panel Vista 360° — Bottom sheet mobile, side panel desktop ── */}
       {selectedCustomer && (
-        <div className="fixed inset-0 z-50 flex justify-end">
+        <div className="fixed inset-0 z-50 flex items-end md:justify-end">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedCustomer(null)} />
-          <div className="relative w-full max-w-sm bg-zinc-950 border-l border-zinc-800 h-full overflow-y-auto shadow-2xl">
+          {/* Mobile: bottom sheet | Desktop: right panel */}
+          <div className="relative w-full md:max-w-sm bg-zinc-950 md:border-l border-t md:border-t-0 border-zinc-800 rounded-t-3xl md:rounded-none md:h-full max-h-[90vh] md:max-h-full overflow-y-auto shadow-2xl">
+            {/* Drag handle on mobile */}
+            <div className="md:hidden w-12 h-1 bg-zinc-800 rounded-full mx-auto mt-3 mb-1" />
             <div className="p-5 space-y-5">
               {/* Header panel */}
               <div className="flex items-start justify-between">
