@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, use } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Settings, MapPin, Phone, Share2, Map, Plus, Trash, Save, AlertCircle, Sparkles } from 'lucide-react'
+import { Settings, MapPin, Phone, Share2, Map, Plus, Trash, Save, AlertCircle, Sparkles, Clock, Bot, MessageSquare } from 'lucide-react'
 
 interface ShippingZone {
   id: string
@@ -98,6 +98,12 @@ export default function ConfigPage({ params }: ConfigPageProps) {
   // iPhones (Cotizador)
   const [iphoneQuotingRanges, setIphoneQuotingRanges] = useState<{ name: string; min_price: string; max_price: string }[]>([])
 
+  // --- Follow-up automático ---
+  const [followupEnabled, setFollowupEnabled] = useState(false)
+  const [followupHours, setFollowupHours] = useState('3')
+  const [followupMode, setFollowupMode] = useState<'fixed' | 'ai'>('ai')
+  const [followupFixedMessage, setFollowupFixedMessage] = useState('')
+
   // Cargar datos
   useEffect(() => {
     const fetchData = async () => {
@@ -192,6 +198,12 @@ export default function ConfigPage({ params }: ConfigPageProps) {
           
           setKeyValueFields(meta.keyValueFields || [{ key: '', value: '' }])
           setIphoneQuotingRanges(meta.iphone_quoting_ranges || [{ name: '', min_price: '', max_price: '' }])
+
+          // Follow-up
+          setFollowupEnabled(!!meta.followup_enabled)
+          setFollowupHours(String(meta.followup_hours || '3'))
+          setFollowupMode(meta.followup_mode || 'ai')
+          setFollowupFixedMessage(meta.followup_fixed_message || '')
         }
       } catch (err: any) {
         console.warn("Fallo cargando configuraciones. Usando mocks locales.", err)
@@ -329,7 +341,13 @@ export default function ConfigPage({ params }: ConfigPageProps) {
         meeting_type: meetingType,
         agency_type: agencyType,
         keyValueFields,
-        iphone_quoting_ranges: iphoneQuotingRanges
+        iphone_quoting_ranges: iphoneQuotingRanges,
+
+        // Follow-up
+        followup_enabled: followupEnabled,
+        followup_hours: Number(followupHours) || 3,
+        followup_mode: followupMode,
+        followup_fixed_message: followupFixedMessage
       }
 
       if (!dbConnected || businessId.startsWith('demo-') || businessId === 'zapas-premium') {
@@ -1133,6 +1151,108 @@ export default function ConfigPage({ params }: ConfigPageProps) {
               </div>
             </div>
           )}
+
+          {/* Sección: Follow-up Automático */}
+          <div className="bg-zinc-950/20 border border-zinc-800 rounded-2xl p-6 space-y-4">
+            <h2 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2 border-b border-zinc-800 pb-2.5">
+              <Clock className="h-4 w-4 text-amber-400" />
+              Seguimiento Automático (Follow-up)
+            </h2>
+            <p className="text-[11px] text-zinc-500 leading-relaxed">
+              Si un chat queda sin concretar pedido, el bot envía un mensaje de seguimiento automático dentro del horario de atención y antes de las 24 hs (límite de Meta).
+            </p>
+
+            {/* Toggle activar */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-900/40 border border-zinc-800">
+              <div>
+                <p className="text-xs font-semibold text-white">Activar seguimiento automático</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5">El bot enviará un mensaje unas horas después del último mensaje del cliente si no se generó un pedido.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFollowupEnabled(p => !p)}
+                className={`relative w-11 h-6 rounded-full transition-colors cursor-pointer ${
+                  followupEnabled ? 'bg-amber-500' : 'bg-zinc-700'
+                }`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                  followupEnabled ? 'translate-x-5' : 'translate-x-0'
+                }`} />
+              </button>
+            </div>
+
+            {followupEnabled && (
+              <div className="space-y-4 pt-1">
+                {/* Horas de espera */}
+                <div>
+                  <label className="block text-[10px] text-zinc-450 uppercase font-bold tracking-wider">
+                    Horas de espera tras el último mensaje
+                  </label>
+                  <div className="mt-1.5 flex items-center gap-3">
+                    <input
+                      type="number"
+                      min="1"
+                      max="23"
+                      className="w-24 rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
+                      value={followupHours}
+                      onChange={(e) => setFollowupHours(e.target.value)}
+                    />
+                    <span className="text-xs text-zinc-500">horas (máx. 23 hs para respetar el límite de 24 hs de Meta)</span>
+                  </div>
+                </div>
+
+                {/* Modo: IA o Mensaje Fijo */}
+                <div>
+                  <label className="block text-[10px] text-zinc-450 uppercase font-bold tracking-wider mb-2">Tipo de mensaje</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFollowupMode('ai')}
+                      className={`flex items-center gap-2 p-3 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                        followupMode === 'ai'
+                          ? 'border-amber-500/60 bg-amber-500/10 text-amber-300'
+                          : 'border-zinc-800 bg-zinc-900/30 text-zinc-400 hover:border-zinc-700'
+                      }`}
+                    >
+                      <Bot className="h-4 w-4" />
+                      Generado por IA
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFollowupMode('fixed')}
+                      className={`flex items-center gap-2 p-3 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                        followupMode === 'fixed'
+                          ? 'border-amber-500/60 bg-amber-500/10 text-amber-300'
+                          : 'border-zinc-800 bg-zinc-900/30 text-zinc-400 hover:border-zinc-700'
+                      }`}
+                    >
+                      <MessageSquare className="h-4 w-4" />
+                      Mensaje fijo
+                    </button>
+                  </div>
+                </div>
+
+                {followupMode === 'ai' && (
+                  <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 text-[11px] text-amber-300 leading-relaxed">
+                    <strong>Modo IA:</strong> El bot analizará el contexto de la conversación y generará un mensaje de seguimiento personalizado y natural para intentar retomar el interés del cliente.
+                  </div>
+                )}
+
+                {followupMode === 'fixed' && (
+                  <div>
+                    <label className="block text-[10px] text-zinc-450 uppercase font-bold tracking-wider">Mensaje de seguimiento</label>
+                    <textarea
+                      rows={3}
+                      className="mt-1.5 block w-full rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none resize-none"
+                      placeholder="Ej: ¡Hola! 👋 ¿Pudiste ver nuestro menú? Estamos para ayudarte cuando quieras."
+                      value={followupFixedMessage}
+                      onChange={(e) => setFollowupFixedMessage(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Botón de guardar global */}
           <div className="bg-zinc-950/20 border border-zinc-800 rounded-2xl p-6 flex justify-end">
