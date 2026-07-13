@@ -26,6 +26,7 @@ const MODULES = [
   { id: 'crm_premium', name: 'CRM Premium (Segmentación + Broadcast)' },
   { id: 'agenda', name: 'Agenda / Reservas' },
   { id: 'catalog', name: 'Catálogo y Stock' },
+  { id: 'dolar_widget', name: 'Widget Cotización Dólar' },
   { id: 'chat', name: 'Chat Inbox (Core)' },
   { id: 'clients', name: 'Clientes (Core)' },
   { id: 'ai_config', name: 'Inteligencia Artificial (Core)' },
@@ -75,7 +76,7 @@ export function BusinessForm({ initialValues, onSubmit, isLoading = false, isEdi
       rubro: initialValues?.rubro || 'Personalizado',
       subscription_price: initialValues?.subscription_price || 0.00,
       expiration_date: getFormattedDate(initialValues?.expiration_date),
-      enabled_modules: initialValues?.enabled_modules || ['chat', 'clients', 'ai_config', 'business_config', 'whatsapp_config', 'crm', 'crm_premium', 'catalog', 'agenda'],
+      enabled_modules: initialValues?.enabled_modules || ['chat', 'clients', 'ai_config', 'business_config', 'whatsapp_config', 'crm', 'crm_premium', 'catalog', 'agenda', 'dolar_widget'],
       owner_email: '',
       owner_password: '',
       owner_name: '',
@@ -87,8 +88,11 @@ export function BusinessForm({ initialValues, onSubmit, isLoading = false, isEdi
 
   // Auto-seleccionar módulos recomendados según el rubro comercial elegido
   useEffect(() => {
+    const isDolarRelevant = selectedRubro === 'iPhones' || selectedRubro === 'Automotriz' || selectedRubro === 'E-commerce'
+    const dolarModule = isDolarRelevant ? ['dolar_widget'] : []
+
     if (selectedRubro === 'Comida' || selectedRubro === 'E-commerce' || selectedRubro === 'Cursos' || selectedRubro === 'iPhones') {
-      setValue('enabled_modules', ['chat', 'clients', 'crm_premium', 'ai_config', 'business_config', 'whatsapp_config', 'crm', 'catalog'])
+      setValue('enabled_modules', ['chat', 'clients', 'crm_premium', 'ai_config', 'business_config', 'whatsapp_config', 'crm', 'catalog', ...dolarModule])
     } else if (
       selectedRubro === 'Peluquería' || 
       selectedRubro === 'Gym' || 
@@ -98,7 +102,7 @@ export function BusinessForm({ initialValues, onSubmit, isLoading = false, isEdi
       selectedRubro === 'Agencia' ||
       selectedRubro === 'Servicios'
     ) {
-      setValue('enabled_modules', ['chat', 'clients', 'crm_premium', 'ai_config', 'business_config', 'whatsapp_config', 'agenda', 'catalog'])
+      setValue('enabled_modules', ['chat', 'clients', 'crm_premium', 'ai_config', 'business_config', 'whatsapp_config', 'agenda', 'catalog', ...dolarModule])
     }
   }, [selectedRubro, setValue])
 

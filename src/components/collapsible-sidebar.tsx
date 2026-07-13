@@ -58,7 +58,7 @@ export function CollapsibleSidebar({ businessId, businessName, rubro, enabledMod
         )}
 
         {/* Dolar Widget */}
-        {!collapsed && <DolarWidget />}
+        {!collapsed && enabledModules.includes('dolar_widget') && <DolarWidget />}
 
         {/* Menú de Navegación */}
         <DashboardNav

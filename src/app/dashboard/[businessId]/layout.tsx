@@ -53,7 +53,7 @@ export default async function DashboardLayout({ children, params }: DashboardLay
     } else if (businessId === 'demo-zapas-id' || businessId === 'zapas-premium') {
       businessName = 'Zapas Premium (Demo)'
       rubro = 'E-commerce'
-      enabledModules = ['chat', 'clients', 'crm_premium', 'ai_config', 'business_config', 'whatsapp_config', 'crm', 'catalog']
+      enabledModules = ['chat', 'clients', 'crm_premium', 'ai_config', 'business_config', 'whatsapp_config', 'crm', 'catalog', 'dolar_widget']
     }
   }
 
