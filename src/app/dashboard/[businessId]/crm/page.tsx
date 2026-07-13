@@ -63,6 +63,7 @@ export default function CRMPage({ params }: CRMPageProps) {
   const supabase = createClient()
 
   const [isLoading, setIsLoading] = useState(true)
+  const [hasAccess, setHasAccess] = useState(true)
   const [customers, setCustomers] = useState<CRMCustomer[]>([])
   const [metrics, setMetrics] = useState<Metrics | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -80,6 +81,25 @@ export default function CRMPage({ params }: CRMPageProps) {
     const fetchData = async () => {
       setIsLoading(true)
       try {
+        const { data: bizData, error: bizError } = await supabase
+          .from('businesses')
+          .select('enabled_modules')
+          .eq('id', businessId)
+          .single()
+
+        if (bizError || !bizData) {
+          setHasAccess(false)
+          setIsLoading(false)
+          return
+        }
+
+        const modules = bizData.enabled_modules || []
+        if (!modules.includes('crm_premium')) {
+          setHasAccess(false)
+          setIsLoading(false)
+          return
+        }
+
         const [sessionsRes, ordersRes] = await Promise.all([
           supabase
             .from('chat_sessions')
@@ -261,6 +281,28 @@ export default function CRMPage({ params }: CRMPageProps) {
         <div className="text-center space-y-3">
           <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-xs text-zinc-500">Cargando CRM...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!hasAccess) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="text-center max-w-sm p-6 bg-zinc-950/40 border border-zinc-800 rounded-2xl space-y-4">
+          <div className="w-12 h-12 bg-red-500/10 border border-red-500/20 text-red-450 rounded-2xl flex items-center justify-center mx-auto">
+            <AlertCircle className="h-6 w-6" />
+          </div>
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider">Acceso Restringido</h2>
+          <p className="text-xs text-zinc-400 leading-relaxed">
+            El módulo <strong>CRM Premium</strong> no está activo para este negocio. Comuníquese con el Administrador para solicitar el acceso.
+          </p>
+          <Link
+            href={`/dashboard/${businessId}`}
+            className="inline-flex items-center justify-center px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white font-semibold hover:bg-zinc-800 transition-all"
+          >
+            Volver al Panel
+          </Link>
         </div>
       </div>
     )

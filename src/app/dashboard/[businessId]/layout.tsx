@@ -17,9 +17,21 @@ export default async function DashboardLayout({ children, params }: DashboardLay
   let businessName = 'Panel de Control'
   let rubro = 'Personalizado'
   let enabledModules: string[] = ['chat', 'clients', 'ai_config', 'business_config', 'whatsapp_config', 'crm', 'catalog', 'agenda']
+  let isSuperAdmin = false
 
   try {
     const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    if (user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+      isSuperAdmin = profile?.role === 'superadmin'
+    }
+
     const { data } = await supabase
       .from('businesses')
       .select('name, rubro, enabled_modules')
@@ -37,11 +49,11 @@ export default async function DashboardLayout({ children, params }: DashboardLay
     if (businessId === 'demo-business-id') {
       businessName = 'Pizzería Bella (Demo)'
       rubro = 'Comida'
-      enabledModules = ['chat', 'clients', 'ai_config', 'business_config', 'whatsapp_config', 'crm', 'catalog']
+      enabledModules = ['chat', 'clients', 'crm_premium', 'ai_config', 'business_config', 'whatsapp_config', 'crm', 'catalog']
     } else if (businessId === 'demo-zapas-id' || businessId === 'zapas-premium') {
       businessName = 'Zapas Premium (Demo)'
       rubro = 'E-commerce'
-      enabledModules = ['chat', 'clients', 'ai_config', 'business_config', 'whatsapp_config', 'crm', 'catalog']
+      enabledModules = ['chat', 'clients', 'crm_premium', 'ai_config', 'business_config', 'whatsapp_config', 'crm', 'catalog']
     }
   }
 
@@ -56,6 +68,7 @@ export default async function DashboardLayout({ children, params }: DashboardLay
         businessName={businessName}
         rubro={rubro}
         enabledModules={enabledModules}
+        isSuperAdmin={isSuperAdmin}
       />
 
       {/* =====================

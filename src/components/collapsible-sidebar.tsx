@@ -11,9 +11,10 @@ interface CollapsibleSidebarProps {
   businessName: string
   rubro: string
   enabledModules: string[]
+  isSuperAdmin?: boolean
 }
 
-export function CollapsibleSidebar({ businessId, businessName, rubro, enabledModules }: CollapsibleSidebarProps) {
+export function CollapsibleSidebar({ businessId, businessName, rubro, enabledModules, isSuperAdmin = false }: CollapsibleSidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
 
   // Persist collapse state across navigation
@@ -38,37 +39,26 @@ export function CollapsibleSidebar({ businessId, businessName, rubro, enabledMod
       <div className={`space-y-7 ${collapsed ? 'space-y-5' : ''}`}>
 
         {/* Logo ZapFlow */}
-        <div className={`flex items-center gap-2.5 pt-1 ${collapsed ? 'justify-center' : ''}`}>
-          <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
-            <Zap className="h-4 w-4 text-white fill-white" />
-          </div>
-          {!collapsed && (
-            <div>
-              <span className="text-sm font-black text-white tracking-tight">ZapFlow</span>
-              <span className="block text-[9px] text-emerald-400 font-bold uppercase tracking-widest">Business Hub</span>
+        {!collapsed ? (
+          <div className="flex items-center gap-2.5 px-1.5 py-1">
+            <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/25 shrink-0">
+              <Zap className="h-4 w-4 text-white fill-white" />
             </div>
-          )}
-        </div>
-
-        {/* Datos del negocio */}
-        {!collapsed && (
-          <div className="px-3 py-2.5 rounded-xl bg-zinc-800/40 border border-zinc-800 space-y-0.5">
-            <span className="text-[9px] uppercase font-bold tracking-wider text-zinc-500">Negocio activo</span>
-            <h2 className="font-bold text-xs text-white truncate max-w-[180px]" title={businessName}>
-              {businessName}
-            </h2>
-            <span className="inline-block bg-emerald-500/10 border border-emerald-500/20 text-[9px] px-1.5 py-0.5 rounded text-emerald-400 font-bold">
-              {rubro}
-            </span>
+            <div>
+              <span className="font-black text-sm tracking-tight text-white block leading-none">ZapFlow</span>
+              <span className="text-[10px] text-zinc-500 font-bold block mt-0.5 truncate max-w-[140px]">
+                {businessName}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-8 w-8 mx-auto rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 shadow-md">
+            <Zap className="h-4.5 w-4.5 text-white fill-white" />
           </div>
         )}
 
-        {/* Widget Dólar Blue (solo iPhones, solo cuando expandido) */}
-        {rubro === 'iPhones' && !collapsed && (
-          <div className="px-1">
-            <DolarWidget />
-          </div>
-        )}
+        {/* Dolar Widget */}
+        {!collapsed && <DolarWidget />}
 
         {/* Menú de Navegación */}
         <DashboardNav
@@ -83,13 +73,15 @@ export function CollapsibleSidebar({ businessId, businessName, rubro, enabledMod
       <div className={`pt-4 border-t border-zinc-800 flex flex-col gap-2 ${collapsed ? 'items-center' : ''}`}>
         {!collapsed ? (
           <>
-            <Link
-              href="/admin"
-              className="flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              <span>Volver a Superadmin</span>
-            </Link>
+            {isSuperAdmin && (
+              <Link
+                href="/admin"
+                className="flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                <span>Volver a Superadmin</span>
+              </Link>
+            )}
             <div className="flex items-center justify-between pt-1 border-t border-zinc-800">
               <span className="text-[10px] text-zinc-500 flex items-center gap-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -102,9 +94,13 @@ export function CollapsibleSidebar({ businessId, businessName, rubro, enabledMod
             </div>
           </>
         ) : (
-          <Link href="/admin" title="Volver a Superadmin" className="text-zinc-500 hover:text-zinc-300 transition-colors">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
+          <>
+            {isSuperAdmin && (
+              <Link href="/admin" title="Volver a Superadmin" className="text-zinc-500 hover:text-zinc-300 transition-colors">
+                <ArrowLeft className="h-4 w-4" />
+              </Link>
+            )}
+          </>
         )}
 
         {/* Toggle button */}
