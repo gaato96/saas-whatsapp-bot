@@ -2,6 +2,7 @@ import React from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { LogoutButton } from '@/components/logout-button'
 
 export default async function AdminLayout({
   children,
@@ -81,9 +82,7 @@ export default async function AdminLayout({
             <span className="text-xs font-bold text-white">Superadmin Demo</span>
             <span className="text-[10px] text-zinc-500">admin@saas.com</span>
           </div>
-          <Link href="/login" className="text-xs text-zinc-400 hover:text-white">
-            🚪 Salir
-          </Link>
+          <LogoutButton>🚪 Salir</LogoutButton>
         </div>
       </aside>
 

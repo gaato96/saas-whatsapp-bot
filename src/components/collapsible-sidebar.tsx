@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { DashboardNav } from '@/components/dashboard-nav'
 import { DolarWidget } from '@/components/dolar-widget'
 import { ArrowLeft, LogOut, Zap, ChevronLeft, ChevronRight } from 'lucide-react'
+import { LogoutButton } from '@/components/logout-button'
 
 interface CollapsibleSidebarProps {
   businessId: string
@@ -87,10 +88,12 @@ export function CollapsibleSidebar({ businessId, businessName, rubro, enabledMod
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 Bot Activo
               </span>
-              <Link href="/login" className="text-[10px] text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
-                <LogOut className="h-3 w-3" />
+              <LogoutButton
+                className="text-[10px] text-zinc-400 hover:text-white flex items-center gap-1 transition-colors cursor-pointer"
+                icon={true}
+              >
                 <span>Salir</span>
-              </Link>
+              </LogoutButton>
             </div>
           </>
         ) : (

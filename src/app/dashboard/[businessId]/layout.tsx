@@ -5,6 +5,7 @@ import { MobileNav } from '@/components/mobile-nav'
 import { LogOut, Zap } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme-toggle'
 import Link from 'next/link'
+import { LogoutButton } from '@/components/logout-button'
 
 
 interface DashboardLayoutProps {
@@ -101,9 +102,7 @@ export default async function DashboardLayout({ children, params }: DashboardLay
               <span className="text-[10px] text-emerald-400 font-bold font-mono">Bot Activo</span>
             </div>
             {/* Mobile: logout link */}
-            <Link href="/login" className="lg:hidden text-zinc-500 hover:text-white transition-colors p-1">
-              <LogOut className="h-4 w-4" />
-            </Link>
+            <LogoutButton className="lg:hidden text-zinc-500 hover:text-white transition-colors p-1" icon={true} />
           </div>
         </header>
 
