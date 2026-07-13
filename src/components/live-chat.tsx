@@ -846,7 +846,7 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
             {/* Layout del Chat y Panel Lateral */}
             <div className="flex-1 flex overflow-hidden min-h-0 relative">
               {/* Ventana de Mensajes estilo WhatsApp */}
-              <div className="flex-1 flex flex-col h-full bg-zinc-950/40 bg-[radial-gradient(#1f2937_1px,transparent_1px)] [background-size:18px_18px] min-h-0">
+              <div className="flex-1 flex flex-col h-full bg-zinc-950 min-h-0">
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 min-h-0">
                   {messages.map((m, idx) => {
                     const isCustomer = m.sender === 'customer'
@@ -1207,7 +1207,7 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
             </div>
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-zinc-650 font-medium p-8 text-center bg-zinc-950/20 bg-[radial-gradient(#1f2937_1px,transparent_1px)] [background-size:18px_18px]">
+          <div className="flex-1 flex flex-col items-center justify-center text-zinc-600 font-medium p-8 text-center bg-zinc-950">
             <Bot className="h-10 w-10 text-zinc-800 mb-2.5 animate-bounce" />
             <span className="text-xs">Selecciona una conversación del listado lateral para auditar el chat.</span>
           </div>
