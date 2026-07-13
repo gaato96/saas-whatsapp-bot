@@ -16,6 +16,8 @@ import {
   Briefcase,
   BookOpen,
   ShoppingCart,
+  BarChart2,
+  Megaphone,
 } from 'lucide-react'
 
 interface DashboardNavProps {
@@ -71,9 +73,9 @@ export function DashboardNav({ businessId, rubro = 'Personalizado', enabledModul
   const getEnabledModules = () => {
     if (enabledModules && enabledModules.length > 0) return enabledModules
     if (rubro === 'Comida' || rubro === 'E-commerce' || rubro === 'Cursos' || rubro === 'iPhones') {
-      return ['chat', 'clients', 'ai_config', 'business_config', 'whatsapp_config', 'crm', 'catalog']
+      return ['chat', 'clients', 'crm_premium', 'ai_config', 'business_config', 'whatsapp_config', 'crm', 'catalog']
     }
-    return ['chat', 'clients', 'ai_config', 'business_config', 'whatsapp_config', 'agenda', 'catalog']
+    return ['chat', 'clients', 'crm_premium', 'ai_config', 'business_config', 'whatsapp_config', 'agenda', 'catalog']
   }
 
   const activeModules = getEnabledModules()
@@ -113,6 +115,12 @@ export function DashboardNav({ businessId, rubro = 'Personalizado', enabledModul
           name: 'Contactos',
           href: `/dashboard/${businessId}/clientes`,
           icon: Users,
+        },
+        {
+          id: 'crm_premium',
+          name: 'CRM Premium',
+          href: `/dashboard/${businessId}/crm`,
+          icon: BarChart2,
         },
         {
           id: 'catalog',

@@ -962,14 +962,14 @@ export function LiveChat({ businessId, initialSessions }: LiveChatProps) {
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
-                      title="Emojis (Pro)"
+                      title="Emojis"
                       className="p-2 rounded-full text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/60 transition-colors cursor-pointer"
                     >
                       <Smile className="h-4 w-4" />
                     </button>
                     <button
                       type="button"
-                      title="Adjuntar archivo (Pro)"
+                      title="Adjuntar archivo"
                       className="p-2 rounded-full text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/60 transition-colors cursor-pointer"
                     >
                       <Paperclip className="h-4 w-4" />
