@@ -3,10 +3,11 @@
 import React, { useState, useEffect, use, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
-  Users, Phone, MessageSquare, Bot, AlertCircle, ShoppingCart,
+  Users, Phone, MessageSquare, Bot, AlertCircle, Clock,
   ShieldAlert, Search, Star, MapPin, Tag, StickyNote, X, Save
 } from 'lucide-react'
 import Link from 'next/link'
+
 
 interface ContactDetails {
   address?: string
@@ -22,7 +23,7 @@ interface Customer {
   phone: string
   lastInteraction: string
   totalOrders: number
-  totalSpent: number
+  lastOrderDate?: string | null
   status: 'bot_handling' | 'human_required'
   notes?: string
   contactDetails?: ContactDetails
@@ -30,6 +31,15 @@ interface Customer {
 
 interface ClientesPageProps {
   params: Promise<{ businessId: string }>
+}
+
+// Helper: traffic-light color for last order date
+function getLastOrderIndicator(lastOrderDate: string | null | undefined) {
+  if (!lastOrderDate) return { dot: 'bg-zinc-600', text: 'text-zinc-500', label: 'Sin pedidos' }
+  const diffDays = Math.floor((Date.now() - new Date(lastOrderDate).getTime()) / 86400000)
+  if (diffDays < 7)  return { dot: 'bg-emerald-400', text: 'text-emerald-400', label: diffDays === 0 ? 'Hoy' : `Hace ${diffDays}d` }
+  if (diffDays < 30) return { dot: 'bg-amber-400',   text: 'text-amber-400',   label: `Hace ${diffDays}d` }
+  return                     { dot: 'bg-red-400',     text: 'text-red-400',     label: `Hace ${diffDays}d` }
 }
 
 export default function ClientesPage({ params }: ClientesPageProps) {
@@ -66,27 +76,31 @@ export default function ClientesPage({ params }: ClientesPageProps) {
 
         const { data: orders, error: ordersError } = await supabase
           .from('orders_bookings')
-          .select('customer_phone, total, status')
+          .select('customer_phone, total, status, created_at')
           .eq('business_id', businessId)
 
         if (ordersError) throw ordersError
 
-        const orderSummaryByPhone: { [phone: string]: { count: number; total: number } } = {}
+        const orderSummaryByPhone: { [phone: string]: { count: number; lastDate: string | null } } = {}
         if (orders) {
           orders.forEach(o => {
             if (!orderSummaryByPhone[o.customer_phone]) {
-              orderSummaryByPhone[o.customer_phone] = { count: 0, total: 0 }
+              orderSummaryByPhone[o.customer_phone] = { count: 0, lastDate: null }
             }
             if (o.status !== 'cancelled') {
               orderSummaryByPhone[o.customer_phone].count += 1
-              orderSummaryByPhone[o.customer_phone].total += Number(o.total)
+              const oDate = o.created_at
+              const cur = orderSummaryByPhone[o.customer_phone].lastDate
+              if (!cur || oDate > cur) {
+                orderSummaryByPhone[o.customer_phone].lastDate = oDate
+              }
             }
           })
         }
 
         const consolidated: Customer[] = (chatSessions || []).map((session, idx) => {
           const phone = session.customer_phone
-          const orderSum = orderSummaryByPhone[phone] || { count: 0, total: 0 }
+          const orderSum = orderSummaryByPhone[phone] || { count: 0, lastDate: null }
           const details: ContactDetails = session.contact_details || {}
 
           return {
@@ -98,23 +112,23 @@ export default function ClientesPage({ params }: ClientesPageProps) {
               day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
             }),
             totalOrders: orderSum.count,
-            totalSpent: orderSum.total,
+            lastOrderDate: orderSum.lastDate,
             status: session.status,
             notes: session.notes || '',
             contactDetails: details,
           }
         })
 
-        consolidated.sort((a, b) => b.totalSpent - a.totalSpent)
+        consolidated.sort((a, b) => b.totalOrders - a.totalOrders)
         setCustomers(consolidated)
       } catch (err: any) {
         console.warn("Fallo cargando clientes. Demo activo.", err)
         setDbConnected(false)
         setCustomers([
-          { id: 'c1', name: 'Juan Pérez', nickname: 'Juancho', phone: '+54 9 11 3829-3849', lastInteraction: 'Hoy, 10:15 hs', totalOrders: 7, totalSpent: 12400, status: 'bot_handling', notes: 'Siempre pide picante extra.', contactDetails: { address: 'Corrientes 1234', neighborhood: 'Palermo', delivery_notes: 'Timbre no funciona, llamar al llegar', preferences: 'Sin cebolla siempre' } },
-          { id: 'c2', name: 'María Gómez', nickname: 'Mari', phone: '+54 9 11 4982-1209', lastInteraction: 'Hoy, 14:32 hs', totalOrders: 5, totalSpent: 8900, status: 'bot_handling', notes: 'Prefiere retirar en local.', contactDetails: { neighborhood: 'Villa Crespo' } },
-          { id: 'c3', name: 'Esteban Quinteros', phone: '+54 9 11 5012-3294', lastInteraction: 'Ayer, 17:05 hs', totalOrders: 3, totalSpent: 5200, status: 'human_required', notes: 'Preguntó por planes corporativos.' },
-          { id: 'c4', name: 'Clara Domínguez', phone: '+54 9 11 2093-8392', lastInteraction: '17 Jun, 09:12 hs', totalOrders: 0, totalSpent: 0, status: 'bot_handling' },
+          { id: 'c1', name: 'Juan Pérez', nickname: 'Juancho', phone: '+54 9 11 3829-3849', lastInteraction: 'Hoy, 10:15 hs', totalOrders: 7, lastOrderDate: new Date(Date.now() - 2 * 86400000).toISOString(), status: 'bot_handling', notes: 'Siempre pide picante extra.', contactDetails: { address: 'Corrientes 1234', neighborhood: 'Palermo', delivery_notes: 'Timbre no funciona, llamar al llegar', preferences: 'Sin cebolla siempre' } },
+          { id: 'c2', name: 'María Gómez', nickname: 'Mari', phone: '+54 9 11 4982-1209', lastInteraction: 'Hoy, 14:32 hs', totalOrders: 5, lastOrderDate: new Date(Date.now() - 15 * 86400000).toISOString(), status: 'bot_handling', notes: 'Prefiere retirar en local.', contactDetails: { neighborhood: 'Villa Crespo' } },
+          { id: 'c3', name: 'Esteban Quinteros', phone: '+54 9 11 5012-3294', lastInteraction: 'Ayer, 17:05 hs', totalOrders: 3, lastOrderDate: new Date(Date.now() - 45 * 86400000).toISOString(), status: 'human_required', notes: 'Preguntó por planes corporativos.' },
+          { id: 'c4', name: 'Clara Domínguez', phone: '+54 9 11 2093-8392', lastInteraction: '17 Jun, 09:12 hs', totalOrders: 0, lastOrderDate: null, status: 'bot_handling' },
         ])
       } finally {
         setIsLoading(false)
@@ -320,12 +334,15 @@ export default function ClientesPage({ params }: ClientesPageProps) {
                 <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] text-zinc-500">{c.totalOrders} pedidos</span>
-                    {c.totalSpent > 0 && (
-                      <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-0.5">
-                        <ShoppingCart className="h-2.5 w-2.5" />
-                        ${c.totalSpent.toLocaleString('es-AR')}
-                      </span>
-                    )}
+                    {(() => {
+                      const ind = getLastOrderIndicator(c.lastOrderDate)
+                      return (
+                        <span className={`text-[10px] font-bold flex items-center gap-1 ${ind.text}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${ind.dot}`} />
+                          {ind.label}
+                        </span>
+                      )
+                    })()}
                   </div>
                   <div className="flex gap-1.5">
                     <button
@@ -363,7 +380,7 @@ export default function ClientesPage({ params }: ClientesPageProps) {
                     <th className="px-5 py-3.5">Teléfono</th>
                     <th className="px-5 py-3.5">Dirección / Barrio</th>
                     <th className="px-5 py-3.5 text-center">Pedidos</th>
-                    <th className="px-5 py-3.5 text-center">Gastado</th>
+                    <th className="px-5 py-3.5 text-center">Último Pedido</th>
                     <th className="px-5 py-3.5 text-center">Bot</th>
                     <th className="px-5 py-3.5 text-right">Acciones</th>
                   </tr>
@@ -425,14 +442,16 @@ export default function ClientesPage({ params }: ClientesPageProps) {
                       </td>
                       <td className="px-5 py-3.5 text-center font-bold text-zinc-200">{c.totalOrders}</td>
                       <td className="px-5 py-3.5 text-center">
-                        {c.totalSpent > 0 ? (
-                          <span className="inline-flex items-center gap-1 text-emerald-400 font-bold bg-emerald-500/5 px-2 py-0.5 rounded border border-emerald-500/10 font-mono text-[11px]">
-                            <ShoppingCart className="h-2.5 w-2.5" />
-                            ${c.totalSpent.toLocaleString('es-AR')}
-                          </span>
-                        ) : (
-                          <span className="text-zinc-700 text-[10px]">—</span>
-                        )}
+                        {(() => {
+                          const ind = getLastOrderIndicator(c.lastOrderDate)
+                          return (
+                            <span className={`inline-flex items-center gap-1.5 font-bold text-[11px] ${ind.text}`}>
+                              <span className={`h-2 w-2 rounded-full shrink-0 ${ind.dot}`} />
+                              <Clock className="h-3 w-3" />
+                              {ind.label}
+                            </span>
+                          )
+                        })()}
                       </td>
                       <td className="px-5 py-3.5 text-center">
                         <button

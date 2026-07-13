@@ -1,11 +1,10 @@
 import React from 'react'
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { DashboardNav } from '@/components/dashboard-nav'
+import { CollapsibleSidebar } from '@/components/collapsible-sidebar'
 import { MobileNav } from '@/components/mobile-nav'
-import { ArrowLeft, LogOut, Zap } from 'lucide-react'
+import { LogOut, Zap } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme-toggle'
-import { DolarWidget } from '@/components/dolar-widget'
+import Link from 'next/link'
 
 
 interface DashboardLayoutProps {
@@ -50,68 +49,14 @@ export default async function DashboardLayout({ children, params }: DashboardLay
     <div className="flex min-h-screen bg-zinc-900 text-zinc-100 font-sans">
 
       {/* =====================
-          SIDEBAR — solo desktop
+          SIDEBAR — solo desktop (collapsible)
           ===================== */}
-      <aside className="hidden lg:flex w-64 border-r border-zinc-800 bg-zinc-950/40 backdrop-blur-md flex-col justify-between p-5 sticky top-0 h-screen overflow-y-auto">
-        <div className="space-y-7">
-
-          {/* Logo ZapFlow */}
-          <div className="space-y-1 pt-1">
-            <div className="flex items-center gap-2.5">
-              {/* ZapFlow Icon */}
-              <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
-                <Zap className="h-4 w-4 text-white fill-white" />
-              </div>
-              <div>
-                <span className="text-sm font-black text-white tracking-tight">ZapFlow</span>
-                <span className="block text-[9px] text-emerald-400 font-bold uppercase tracking-widest">Business Hub</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Datos del negocio */}
-          <div className="px-3 py-2.5 rounded-xl bg-zinc-800/40 border border-zinc-800 space-y-0.5">
-            <span className="text-[9px] uppercase font-bold tracking-wider text-zinc-500">Negocio activo</span>
-            <h2 className="font-bold text-xs text-white truncate max-w-[180px]" title={businessName}>
-              {businessName}
-            </h2>
-            <span className="inline-block bg-emerald-500/10 border border-emerald-500/20 text-[9px] px-1.5 py-0.5 rounded text-emerald-400 font-bold">
-              {rubro}
-            </span>
-          </div>
-
-          {/* Widget Dólar Blue (solo iPhones) */}
-          {rubro === 'iPhones' && (
-            <div className="px-1">
-              <DolarWidget />
-            </div>
-          )}
-
-          {/* Menú de Navegación */}
-          <DashboardNav businessId={businessId} rubro={rubro} enabledModules={enabledModules} />
-        </div>
-
-        {/* Footer Sidebar */}
-        <div className="pt-4 border-t border-zinc-800 flex flex-col gap-2">
-          <Link
-            href="/admin"
-            className="flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            <span>Volver a Superadmin</span>
-          </Link>
-          <div className="flex items-center justify-between pt-1 border-t border-zinc-800">
-            <span className="text-[10px] text-zinc-500 flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Bot Activo
-            </span>
-            <Link href="/login" className="text-[10px] text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
-              <LogOut className="h-3 w-3" />
-              <span>Salir</span>
-            </Link>
-          </div>
-        </div>
-      </aside>
+      <CollapsibleSidebar
+        businessId={businessId}
+        businessName={businessName}
+        rubro={rubro}
+        enabledModules={enabledModules}
+      />
 
       {/* =====================
           ÁREA DE CONTENIDO

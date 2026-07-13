@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, use, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { FileText, Plus, X, Upload, CheckCircle } from 'lucide-react'
+import { FileText, Plus, X, Upload, CheckCircle, Image as ImageIcon, Trash2, Edit, Save, Loader2 } from 'lucide-react'
 import { DolarWidget } from '@/components/dolar-widget'
 
 interface Product {
@@ -13,6 +13,7 @@ interface Product {
   price: number
   stock: number
   is_active: boolean
+  image_url?: string | null
 }
 
 // Ítem parseado desde el texto libre antes de confirmar la importación
@@ -98,6 +99,19 @@ export default function ProductsPage({ params }: ProductsPageProps) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [price, setPrice] = useState('')
+  const [imageUrl, setImageUrl] = useState('')
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
+
+  // Formulario de edición modal
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editPrice, setEditPrice] = useState('')
+  const [editStock, setEditStock] = useState('')
+  const [editImageUrl, setEditImageUrl] = useState('')
+  const [editImageFile, setEditImageFile] = useState<File | null>(null)
+  const [isSavingEdit, setIsSavingEdit] = useState(false)
 
   const [rubro, setRubro] = useState<string>('Personalizado')
   const [batteryHealth, setBatteryHealth] = useState('100')
@@ -134,7 +148,7 @@ export default function ProductsPage({ params }: ProductsPageProps) {
 
         const { data, error } = await supabase
           .from('products_services')
-          .select('id, business_id, name, description, price, stock, is_active')
+          .select('id, business_id, name, description, price, stock, is_active, image_url')
           .eq('business_id', businessId)
           .order('created_at', { ascending: false })
 
@@ -169,22 +183,48 @@ export default function ProductsPage({ params }: ProductsPageProps) {
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name || !price) return
-    
-    // Si es iPhones, el campo description se compone de los atributos custom
-    const finalDescription = rubro === 'iPhones'
-      ? `Batería: ${batteryHealth}% | Estética: ${aestheticCondition} | Almacenamiento: ${storage} | Color: ${color}`
-      : description
+    setIsUploadingImage(true)
+    setErrorMsg('')
 
-    const payload = { 
-      business_id: businessId, 
-      name, 
-      description: finalDescription, 
-      price: parseFloat(price), 
-      stock: parseInt(stockQty) || 1,
-      is_active: true 
-    }
+    let finalImageUrl = imageUrl.trim() || null
 
     try {
+      // Si hay archivo seleccionado, subirlo al storage de Supabase
+      if (imageFile && dbConnected) {
+        const fileExt = imageFile.name.split('.').pop()
+        const fileName = `${businessId}/${Date.now()}.${fileExt}`
+        const { error: uploadError } = await supabase.storage
+          .from('product-images')
+          .upload(fileName, imageFile)
+
+        if (uploadError) throw uploadError
+
+        const { data: linkData } = supabase.storage
+          .from('product-images')
+          .getPublicUrl(fileName)
+
+        if (linkData) {
+          finalImageUrl = linkData.publicUrl
+        }
+      } else if (imageFile && !dbConnected) {
+        finalImageUrl = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&auto=format&fit=crop'
+      }
+
+      // Si es iPhones, el campo description se compone de los atributos custom
+      const finalDescription = rubro === 'iPhones'
+        ? `Batería: ${batteryHealth}% | Estética: ${aestheticCondition} | Almacenamiento: ${storage} | Color: ${color}`
+        : description
+
+      const payload = { 
+        business_id: businessId, 
+        name, 
+        description: finalDescription, 
+        price: parseFloat(price), 
+        stock: parseInt(stockQty) || (rubro === 'Comida' ? 0 : 1),
+        is_active: true,
+        image_url: finalImageUrl
+      }
+
       if (!dbConnected) {
         setProducts(prev => [{ id: `mock-${Date.now()}`, ...payload }, ...prev])
       } else {
@@ -192,7 +232,9 @@ export default function ProductsPage({ params }: ProductsPageProps) {
         if (error) throw error
         if (data) setProducts(prev => [data, ...prev])
       }
+
       setName(''); setDescription(''); setPrice(''); setStockQty('1')
+      setImageUrl(''); setImageFile(null)
       // Resetear campos custom
       setBatteryHealth('100')
       setAestheticCondition('Excelente')
@@ -201,6 +243,81 @@ export default function ProductsPage({ params }: ProductsPageProps) {
       setActiveView('catalog')
     } catch (err: any) {
       setErrorMsg('No se pudo guardar: ' + err.message)
+    } finally {
+      setIsUploadingImage(false)
+    }
+  }
+
+  // Abrir modal de edición
+  const handleStartEdit = (p: Product) => {
+    setEditingProduct(p)
+    setEditName(p.name)
+    setEditDescription(p.description || '')
+    setEditPrice(String(p.price))
+    setEditStock(String(p.stock ?? 0))
+    setEditImageUrl(p.image_url || '')
+    setEditImageFile(null)
+  }
+
+  // Guardar edición modal
+  const handleSaveProductEdit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingProduct) return
+    setIsSavingEdit(true)
+    setErrorMsg('')
+
+    let finalImageUrl = editImageUrl.trim() || null
+
+    try {
+      if (editImageFile && dbConnected) {
+        const fileExt = editImageFile.name.split('.').pop()
+        const fileName = `${businessId}/${Date.now()}.${fileExt}`
+        const { error: uploadError } = await supabase.storage
+          .from('product-images')
+          .upload(fileName, editImageFile)
+
+        if (uploadError) throw uploadError
+
+        const { data: linkData } = supabase.storage
+          .from('product-images')
+          .getPublicUrl(fileName)
+
+        if (linkData) {
+          finalImageUrl = linkData.publicUrl
+        }
+      } else if (editImageFile && !dbConnected) {
+        finalImageUrl = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&auto=format&fit=crop'
+      }
+
+      const payload = {
+        name: editName,
+        description: editDescription,
+        price: parseFloat(editPrice) || 0,
+        stock: parseInt(editStock) || 0,
+        image_url: finalImageUrl
+      }
+
+      if (!dbConnected) {
+        setProducts(prev => prev.map(p => p.id === editingProduct.id ? { ...p, ...payload } : p))
+      } else {
+        const { data, error } = await supabase
+          .from('products_services')
+          .update(payload)
+          .eq('id', editingProduct.id)
+          .select()
+          .single()
+
+        if (error) throw error
+        if (data) {
+          setProducts(prev => prev.map(p => p.id === editingProduct.id ? data : p))
+        }
+      }
+
+      setEditingProduct(null)
+    } catch (err: any) {
+      setErrorMsg('No se pudo actualizar: ' + err.message)
+    } finally {
+      setIsSavingEdit(false)
     }
   }
 
@@ -619,13 +736,42 @@ export default function ProductsPage({ params }: ProductsPageProps) {
           ) : (
             <div>
               <label className="block text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Categoría / Descripción</label>
-              <input type="text" className={inputClass} placeholder="Ej: Pizzas, Bebidas, Postres..." value={description} onChange={e => setDescription(e.target.value)} />
+              <textarea rows={3} className="mt-1.5 block w-full rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-2 text-xs text-white placeholder-zinc-650 focus:border-purple-500 focus:outline-none transition-all resize-none" placeholder="Breve descripción del producto, ingredientes, o detalles que el bot usará para asesorar..." value={description} onChange={e => setDescription(e.target.value)} />
             </div>
           )}
 
-          <div className="flex justify-end gap-2">
+          {/* Subida de Imagen Opcional */}
+          <div className="space-y-3 border-t border-zinc-900/60 pt-3">
+            <label className="block text-[11px] text-emerald-400 font-bold uppercase tracking-wider">Imagen del Producto (Opcional)</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] text-zinc-500 mb-1">Subir archivo de imagen</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+                  className="block w-full text-xs text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-zinc-900 file:text-white hover:file:bg-zinc-800 file:cursor-pointer"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-zinc-500 mb-1">O pegar URL de imagen externa</label>
+                <input
+                  type="text"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="https://ejemplo.com/imagen.jpg"
+                  className={inputClass}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={() => setActiveView('catalog')} className="rounded-lg border border-zinc-800 text-zinc-400 px-4 py-2 text-xs font-bold hover:bg-zinc-900 transition-colors">Cancelar</button>
-            <button type="submit" className="rounded-lg bg-purple-600 text-white px-4 py-2 text-xs font-bold hover:bg-purple-500 transition-colors">Guardar en Catálogo</button>
+            <button type="submit" disabled={isUploadingImage} className="rounded-lg bg-purple-655 text-white px-4 py-2 text-xs font-bold hover:bg-purple-600 transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer">
+              {isUploadingImage && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {isUploadingImage ? 'Guardando e Imagen...' : 'Guardar en Catálogo'}
+            </button>
           </div>
         </form>
       )}
@@ -677,8 +823,12 @@ export default function ProductsPage({ params }: ProductsPageProps) {
                   <th className="px-6 py-4">{rubro === 'iPhones' ? 'Modelo' : 'Nombre'}</th>
                   <th className="px-6 py-4">{rubro === 'iPhones' ? 'Detalles del Equipo' : 'Categoría / Descripción'}</th>
                   <th className="px-6 py-4 text-center w-36">{rubro === 'iPhones' ? 'Precio (USD)' : 'Precio ($)'}</th>
+                  {/* Header de stock — alineado con el cuerpo */}
+                  {(rubro === 'iPhones' || rubro === 'E-commerce') && (
+                    <th className="px-6 py-4 text-center w-28">Stock</th>
+                  )}
                   <th className="px-6 py-4 text-center w-28">Visible en bot</th>
-                  <th className="px-6 py-4 text-right w-24">Acciones</th>
+                  <th className="px-6 py-4 text-right w-44">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-900/40 text-xs">
@@ -686,12 +836,26 @@ export default function ProductsPage({ params }: ProductsPageProps) {
                   const state = savingStates[p.id] || 'idle'
                   return (
                     <tr key={p.id} className="hover:bg-zinc-900/10 transition-colors group">
-                      <td className="px-6 py-4 font-bold text-white">
-                        <div className="flex items-center gap-2">
-                          {p.name}
-                          {state === 'saving' && <span className="h-1.5 w-1.5 rounded-full bg-purple-500 animate-pulse" />}
-                          {state === 'saved' && <span className="text-[10px] text-emerald-400 font-bold">✓</span>}
-                          {state === 'error' && <span className="text-[10px] text-red-400 font-bold">✗</span>}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          {p.image_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img 
+                              src={p.image_url} 
+                              alt={p.name} 
+                              className="h-9 w-9 rounded-lg object-cover bg-zinc-900 border border-zinc-800 shrink-0" 
+                            />
+                          ) : (
+                            <div className="h-9 w-9 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-700 shrink-0">
+                              <ImageIcon className="h-4 w-4" />
+                            </div>
+                          )}
+                          <div>
+                            <span className="font-bold text-white block">{p.name}</span>
+                            {state === 'saving' && <span className="text-[10px] text-purple-400 font-bold block animate-pulse">Guardando...</span>}
+                            {state === 'saved' && <span className="text-[10px] text-emerald-450 font-bold block">✓ Guardado</span>}
+                            {state === 'error' && <span className="text-[10px] text-red-400 font-bold block">✗ Error</span>}
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-zinc-500 max-w-xs truncate" title={p.description}>
@@ -736,12 +900,20 @@ export default function ProductsPage({ params }: ProductsPageProps) {
                         </button>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => handleDelete(p.id)}
-                          className="rounded border border-red-900/30 text-red-500 bg-red-950/10 hover:bg-red-950/25 px-2 py-1 text-[11px] font-bold transition-all"
-                        >
-                          🗑️ Eliminar
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleStartEdit(p)}
+                            className="rounded border border-zinc-800 text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-850 px-2 py-1 text-[11px] font-bold transition-all cursor-pointer"
+                          >
+                            ✏️ Editar
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p.id)}
+                            className="rounded border border-red-900/30 text-red-500 bg-red-950/10 hover:bg-red-950/25 px-2 py-1 text-[11px] font-bold transition-all cursor-pointer"
+                          >
+                            🗑️
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -751,6 +923,130 @@ export default function ProductsPage({ params }: ProductsPageProps) {
           )}
         </div>
       </div>
+
+      {/* ====== MODAL DE EDICIÓN DE PRODUCTO ====== */}
+      {editingProduct && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <form onSubmit={handleSaveProductEdit} className="bg-zinc-950 border border-zinc-800 rounded-2xl p-6 w-full max-w-lg space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                <Edit className="h-4 w-4 text-purple-400" />
+                Editar Ítem del Catálogo
+              </h3>
+              <button type="button" onClick={() => setEditingProduct(null)} className="text-zinc-500 hover:text-white p-1 cursor-pointer">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1">Nombre / Modelo *</label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-850 rounded-lg px-3 py-2 text-xs text-white focus:border-purple-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1">Precio *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={editPrice}
+                    onChange={(e) => setEditPrice(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-850 rounded-lg px-3 py-2 text-xs text-white focus:border-purple-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1">Stock (unidades)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editStock}
+                    onChange={(e) => setEditStock(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-850 rounded-lg px-3 py-2 text-xs text-white focus:border-purple-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1">Categoría / Descripción</label>
+                <textarea
+                  rows={3}
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  placeholder="Categoría o descripción para el bot..."
+                  className="w-full bg-zinc-900 border border-zinc-850 rounded-lg px-3 py-2 text-xs text-white focus:border-purple-500 focus:outline-none resize-none"
+                />
+              </div>
+
+              <div className="space-y-2 border-t border-zinc-900/60 pt-3">
+                <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Imagen del Producto</label>
+                
+                {editImageUrl && (
+                  <div className="flex items-center gap-3 bg-zinc-900/50 border border-zinc-900 p-2 rounded-lg">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={editImageUrl} alt="Preview" className="h-10 w-10 rounded object-cover" />
+                    <span className="text-[10px] text-zinc-500 truncate max-w-[200px]">{editImageUrl}</span>
+                    <button
+                      type="button"
+                      onClick={() => setEditImageUrl('')}
+                      className="ml-auto text-[10px] text-red-400 hover:text-red-300 font-bold cursor-pointer"
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[9px] text-zinc-650 mb-0.5">Subir nueva imagen</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setEditImageFile(e.target.files?.[0] || null)}
+                      className="block w-full text-[10px] text-zinc-400 file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-900 file:text-white hover:file:bg-zinc-800 file:cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] text-zinc-650 mb-0.5">O pegar nueva URL</label>
+                    <input
+                      type="text"
+                      value={editImageUrl}
+                      onChange={(e) => setEditImageUrl(e.target.value)}
+                      placeholder="https://ejemplo.com/imagen.jpg"
+                      className="w-full bg-zinc-900 border border-zinc-850 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-purple-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-zinc-900">
+              <button
+                type="button"
+                onClick={() => setEditingProduct(null)}
+                className="rounded-lg border border-zinc-850 px-4 py-2 text-xs font-bold text-zinc-400 hover:bg-zinc-900 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isSavingEdit}
+                className="rounded-lg bg-emerald-600 text-white px-4 py-2 text-xs font-bold hover:bg-emerald-500 transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+              >
+                {isSavingEdit && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {isSavingEdit ? 'Guardando...' : 'Guardar Cambios'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   )
 }

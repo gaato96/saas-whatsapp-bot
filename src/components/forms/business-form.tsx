@@ -260,7 +260,11 @@ export function BusinessForm({ initialValues, onSubmit, isLoading = false, isEdi
           )}
         </div>
         
-        {selectedRubro === 'Personalizado' ? (
+        {isEditing ? (
+          <p className="text-xs text-zinc-500">
+            Como SuperAdmin podés activar o desactivar cualquier módulo individualmente para este negocio. Los cambios se aplican al guardar.
+          </p>
+        ) : selectedRubro === 'Personalizado' ? (
           <p className="text-xs text-zinc-500">
             Selecciona manualmente cuáles módulos quieres activar para este negocio.
           </p>
@@ -277,13 +281,13 @@ export function BusinessForm({ initialValues, onSubmit, isLoading = false, isEdi
                 type="checkbox"
                 id={`mod-${mod.id}`}
                 value={mod.id}
-                disabled={selectedRubro !== 'Personalizado'}
-                className="h-4 w-4 rounded border-zinc-800 bg-zinc-900 text-purple-600 focus:ring-purple-500 disabled:opacity-60"
+                disabled={!isEditing && selectedRubro !== 'Personalizado'}
+                className="h-4 w-4 rounded border-zinc-800 bg-zinc-900 text-purple-600 focus:ring-purple-500 disabled:opacity-60 cursor-pointer"
                 {...register('enabled_modules')}
               />
               <label 
                 htmlFor={`mod-${mod.id}`} 
-                className={`text-xs font-semibold select-none cursor-pointer ${selectedRubro === 'Personalizado' ? 'text-zinc-200' : 'text-zinc-500'}`}
+                className={`text-xs font-semibold select-none cursor-pointer ${(isEditing || selectedRubro === 'Personalizado') ? 'text-zinc-200' : 'text-zinc-500'}`}
               >
                 {mod.name}
               </label>

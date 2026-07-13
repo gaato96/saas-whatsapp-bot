@@ -187,10 +187,12 @@ function buildSystemPrompt(businessName: string, rubro: string, rubroConfig: any
   const hasStockControl = ["E-commerce", "Personalizado", "iPhones"].includes(rubro);
 
   // Serializar el catálogo de productos con stock actual
+  // Incluye image_url para que Gemini pueda emitir el tag [PRODUCT_IMAGE: url]
   const catalogText = products.length > 0
     ? products.map(p => {
         const stockStr = hasStockControl ? ` | Stock Disponible: ${p.stock}` : "";
-        return `- ID: ${p.id} | Nombre: ${p.name} | Descripción: ${p.description || "Sin descripción"} | Precio: $${p.price}${stockStr}`;
+        const imageStr = p.image_url ? ` | Imagen: ${p.image_url}` : "";
+        return `- ID: ${p.id} | Nombre: ${p.name} | Descripción: ${p.description || "Sin descripción"} | Precio: $${p.price}${stockStr}${imageStr}`;
       }).join("\n")
     : "No hay productos o servicios registrados en este momento.";
 
@@ -435,9 +437,17 @@ ${catalogText}
 
 ${rubroPrompt}
 
+REGLAS PARA ENVÍO DE IMÁGENES DE PRODUCTO:
+- Cuando el catálogo muestre el campo "Imagen: <url>" para un producto, y el cliente te pregunte específicamente por ese producto (precio, descripción, disponibilidad), DEBES emitir exactamente la siguiente etiqueta al inicio de tu respuesta (antes del texto):
+  [PRODUCT_IMAGE: <url_exacta_del_producto>]
+- SOLO emite la etiqueta si el producto tiene el campo "Imagen:" en el catálogo. Si no tiene imagen, omite la etiqueta por completo.
+- SOLO emite UNA etiqueta por respuesta, correspondiente al producto consultado. Si el cliente consulta varios productos en el mismo mensaje, envía la imagen del primero mencionado.
+- La etiqueta NO debe aparecer en el texto visible al cliente. Es una instrucción de sistema.
+
 IMPORTANTE: Reemplaza "UUID" en la etiqueta de orden por el ID de catálogo exacto de 36 caracteres provisto en el catálogo. La etiqueta [ORDER_JSON: ...] debe imprimirse en una sola línea al final y ser un JSON válido.
 `;
 }
+
 
 // Helper para convertir ArrayBuffer a Base64 en bloques para evitar RangeError y optimizar velocidad
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -758,7 +768,7 @@ serve(async (req) => {
 
         const { data: products } = await supabaseAdmin
           .from("products_services")
-          .select("id, name, description, price, stock")
+          .select("id, name, description, price, stock, image_url")
           .eq("business_id", business.id)
           .eq("is_active", true)
 
@@ -996,6 +1006,12 @@ serve(async (req) => {
         let userFacingMessage = aiResponse
         let isHumanRequired = false
         let orderToCreate = null
+        // Extraer URLs de imágenes de producto que Gemini emite como [PRODUCT_IMAGE: url]
+        const productImageUrls: string[] = []
+        userFacingMessage = userFacingMessage.replace(/\[PRODUCT_IMAGE:\s*(https?:\/\/[^\]]+)\]/gi, (_match: string, url: string) => {
+          productImageUrls.push(url.trim())
+          return ""
+        }).trim()
 
         // Evaluar si la IA solicita pasar al agente humano
         if (userFacingMessage.includes("[HUMAN_REQUIRED]")) {
@@ -1136,7 +1152,38 @@ serve(async (req) => {
         const waToken = business.whatsapp_config?.access_token
         if (waToken && phoneId) {
           const waSendUrl = `https://graph.facebook.com/v22.0/${phoneId}/messages`
-          
+
+          // E1. Enviar imágenes de producto ANTES del texto (si las hay)
+          for (const imageUrl of productImageUrls) {
+            try {
+              console.log(`Enviando imagen de producto a WhatsApp: ${imageUrl}`)
+              const imgPayload = {
+                messaging_product: "whatsapp",
+                recipient_type: "individual",
+                to: customerPhone,
+                type: "image",
+                image: { link: imageUrl }
+              }
+              const imgResponse = await fetch(waSendUrl, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${waToken}`,
+                },
+                body: JSON.stringify(imgPayload),
+              })
+              if (!imgResponse.ok) {
+                const imgErrText = await imgResponse.text()
+                console.error(`Error enviando imagen de producto a WhatsApp: ${imgErrText}`)
+              } else {
+                console.log("Imagen de producto enviada con éxito.")
+              }
+            } catch (imgErr) {
+              console.error("Excepción enviando imagen de producto:", imgErr)
+            }
+          }
+
+          // E2. Enviar el mensaje de texto principal
           const waPayload = {
             messaging_product: "whatsapp",
             recipient_type: "individual",

@@ -22,6 +22,7 @@ interface DashboardNavProps {
   businessId: string
   rubro?: string
   enabledModules?: string[]
+  collapsed?: boolean
 }
 
 // ── Nombres y íconos de módulos según rubro ───────────────────────────────────
@@ -64,7 +65,7 @@ function getCatalogLabel(rubro?: string): string {
   }
 }
 
-export function DashboardNav({ businessId, rubro = 'Personalizado', enabledModules = [] }: DashboardNavProps) {
+export function DashboardNav({ businessId, rubro = 'Personalizado', enabledModules = [], collapsed = false }: DashboardNavProps) {
   const pathname = usePathname()
 
   const getEnabledModules = () => {
@@ -155,14 +156,29 @@ export function DashboardNav({ businessId, rubro = 'Personalizado', enabledModul
     <div className="space-y-5">
       {sections.map(section => (
         <div key={section.title} className="space-y-1">
-          <h3 className="px-3 text-[9px] font-black uppercase tracking-widest text-zinc-600 mb-1.5">
-            {section.title}
-          </h3>
+          {!collapsed && (
+            <h3 className="px-3 text-[9px] font-black uppercase tracking-widest text-zinc-600 mb-1.5">
+              {section.title}
+            </h3>
+          )}
           <nav className="space-y-0.5">
             {section.items.map(item => {
               const Icon = item.icon
               const active = isActive(item)
-              return (
+              return collapsed ? (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  title={item.name}
+                  className={`flex items-center justify-center h-9 w-9 mx-auto rounded-xl transition-all ${
+                    active
+                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                      : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/40'
+                  }`}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                </Link>
+              ) : (
                 <Link
                   key={item.href}
                   href={item.href}
