@@ -438,8 +438,9 @@ ${catalogText}
 ${rubroPrompt}
 
 REGLAS PARA ENVÍO DE IMÁGENES DE PRODUCTO:
-- Cuando el catálogo muestre el campo "Imagen: <url>" para un producto, y el cliente te pregunte específicamente por ese producto (precio, descripción, disponibilidad), DEBES emitir exactamente la siguiente etiqueta al inicio de tu respuesta (antes del texto):
-  [PRODUCT_IMAGE: <url_exacta_del_producto>]
+- Cuando el catálogo muestre el campo "Imagen: <url>" para un producto, y el cliente te pregunte por ese producto, solicite ver fotos/imágenes del mismo, o solicite detalles (precio, descripción, disponibilidad), DEBES emitir exactamente la siguiente etiqueta al inicio de tu respuesta (antes del texto):
+  [PRODUCT_IMAGE: url_exacta_del_producto]
+- IMPORTANTE: Escribe la URL limpia, sin comillas, sin llaves, sin signos < >, y sin formato markdown. Ejemplo: [PRODUCT_IMAGE: https://example.com/imagen.jpg]
 - SOLO emite la etiqueta si el producto tiene el campo "Imagen:" en el catálogo. Si no tiene imagen, omite la etiqueta por completo.
 - SOLO emite UNA etiqueta por respuesta, correspondiente al producto consultado. Si el cliente consulta varios productos en el mismo mensaje, envía la imagen del primero mencionado.
 - La etiqueta NO debe aparecer en el texto visible al cliente. Es una instrucción de sistema.
@@ -1008,8 +1009,10 @@ serve(async (req) => {
         let orderToCreate = null
         // Extraer URLs de imágenes de producto que Gemini emite como [PRODUCT_IMAGE: url]
         const productImageUrls: string[] = []
-        userFacingMessage = userFacingMessage.replace(/\[PRODUCT_IMAGE:\s*(https?:\/\/[^\]]+)\]/gi, (_match: string, url: string) => {
-          productImageUrls.push(url.trim())
+        userFacingMessage = userFacingMessage.replace(/\[PRODUCT_IMAGE:\s*([^\s\]]+)\]/gi, (_match: string, url: string) => {
+          let cleanedUrl = url.trim()
+          cleanedUrl = cleanedUrl.replace(/^["'<]*(https?:\/\/[^"'>\s]+)["'>]*$/i, "$1")
+          productImageUrls.push(cleanedUrl)
           return ""
         }).trim()
 
