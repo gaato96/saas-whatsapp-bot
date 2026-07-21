@@ -297,7 +297,7 @@ export default function WhatsAppPage({ params }: WhatsAppPageProps) {
               <div className="p-3.5 bg-emerald-500/5 border border-emerald-500/10 text-emerald-400/90 rounded-xl text-[10px] leading-relaxed flex gap-2">
                 <Info className="h-5 w-5 text-emerald-500 shrink-0" />
                 <span>
-                  <strong>Nota de costos y seguridad:</strong> La API de Gemini 2.5 Flash utiliza una llave global centralizada provista por el servidor, simplificando costos de llamadas con IA.
+                  <strong>Nota de costos y seguridad:</strong> La API de Gemini 3.6 Flash utiliza una llave global centralizada provista por el servidor, simplificando costos de llamadas con IA.
                 </span>
               </div>
             </div>

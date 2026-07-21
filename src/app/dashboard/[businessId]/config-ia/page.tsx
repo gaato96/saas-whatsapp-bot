@@ -222,7 +222,7 @@ export default function ConfigIAPage({ params }: ConfigIAPageProps) {
             Configuración de Inteligencia Artificial
           </h1>
           <p className="text-xs text-zinc-500">
-            Define el comportamiento, reglas de negocio e información que utiliza Gemini 2.5 Flash para atender a tus clientes por WhatsApp.
+            Define el comportamiento, reglas de negocio e información que utiliza Gemini 3.6 Flash para atender a tus clientes por WhatsApp.
           </p>
         </div>
         <button
@@ -299,7 +299,7 @@ export default function ConfigIAPage({ params }: ConfigIAPageProps) {
                     Escribe la personalidad del bot y las pautas generales de atención comercial.
                   </p>
                 </div>
-                <span className="text-[10px] bg-zinc-800 px-2 py-0.5 rounded text-zinc-400 font-mono">Gemini 2.5 Flash</span>
+                <span className="text-[10px] bg-zinc-800 px-2 py-0.5 rounded text-zinc-400 font-mono">Gemini 3.6 Flash</span>
               </div>
               <textarea
                 className="w-full h-80 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 text-xs font-mono text-zinc-200 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all leading-relaxed"

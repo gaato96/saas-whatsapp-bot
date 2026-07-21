@@ -1,4 +1,4 @@
-﻿// =========================================================================
+// =========================================================================
 // SUPABASE EDGE FUNCTION: follow-up-scheduler
 // Cron: cada 30 minutos revisa sesiones sin pedido y envía seguimiento.
 // =========================================================================
@@ -9,7 +9,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || ""
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || ""
-const GEMINI_MODEL = "gemini-2.5-flash"
+const GEMINI_MODEL = "gemini-3.6-flash"
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 

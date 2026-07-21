@@ -5,11 +5,14 @@
 
 // Modelos de Gemini en orden de prioridad — fallback automático ante 503/429/404.
 const GEMINI_MODELS = [
-  "gemini-3.5-flash",        // Principal: modelo más reciente y capaz
-  "gemini-3.1-flash-lite",   // Fallback 1: rápido y eficiente en costos
-  "gemini-2.5-flash",        // Fallback 2: alta velocidad y estabilidad
-  "gemini-2.5-flash-lite",   // Fallback 3: opción más rápida y económica
+  "gemini-3.6-flash",        // Principal: mayor rendimiento en agentes y multimodales con menor uso de tokens
+  "gemini-3.5-flash-lite",   // Fallback 1: ultra rápido y económico (familia 3.5)
+  "gemini-3.5-flash",        // Fallback 2: alta capacidad
+  "gemini-3.1-flash-lite",   // Fallback 3: rápido y eficiente en costos
+  "gemini-2.5-flash",        // Fallback 4: alta velocidad y estabilidad
+  "gemini-2.5-flash-lite",   // Fallback 5: opción económica legada
 ]
+
 
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts"
@@ -978,7 +981,7 @@ serve(async (req) => {
         }))
 
         // ==========================================
-        // C. CONEXIÓN CON LA API DE GEMINI 2.5 FLASH
+        // C. CONEXIÓN CON LA API DE GEMINI 3.6 FLASH
         // ==========================================
         const callGemini = async (conversationContents: any[]) => {
           const payload = {
@@ -997,7 +1000,7 @@ serve(async (req) => {
           return data.candidates?.[0]?.content?.parts?.[0]?.text || ""
         }
 
-        console.log("Invocando a Gemini 2.5 Flash...")
+        console.log("Invocando a Gemini 3.6 Flash...")
         let aiResponse = await callGemini(contents)
         console.log("Respuesta de Gemini recibida:", aiResponse)
 

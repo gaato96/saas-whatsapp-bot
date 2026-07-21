@@ -1,6 +1,6 @@
-# SaaS Chatbot Inteligente para Negocios (WhatsApp & Gemini 2.5 Flash)
+# SaaS Chatbot Inteligente para Negocios (WhatsApp & Gemini 3.6 Flash)
 
-Plataforma SaaS Multi-tenant adaptativa para 10 rubros comerciales. Permite a los negocios conectar su propia cuenta de WhatsApp Cloud API, configurar su contexto e información de negocio, y dejar que un agente inteligente impulsado por **Google Gemini 2.5 Flash** atienda a sus clientes, responda preguntas frecuentes, muestre el catálogo de productos con stock en tiempo real, agende turnos, y gestione pedidos automáticamente.
+Plataforma SaaS Multi-tenant adaptativa para 10 rubros comerciales. Permite a los negocios conectar su propia cuenta de WhatsApp Cloud API, configurar su contexto e información de negocio, y dejar que un agente inteligente impulsado por **Google Gemini 3.6 Flash** atienda a sus clientes, responda preguntas frecuentes, muestre el catálogo de productos con stock en tiempo real, agende turnos, y gestione pedidos automáticamente.
 
 ## 🚀 Características Principales
 
@@ -39,12 +39,12 @@ Para que la plataforma funcione en producción (Vercel y Supabase), debes config
 | :--- | :--- | :--- |
 | `NEXT_PUBLIC_SUPABASE_URL` | URL de tu proyecto de Supabase | `https://xxxx.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Llave anónima pública de Supabase | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` |
-| `GEMINI_API_KEY` | API Key global de Google Gemini 2.5 | `AIzaSy...` |
+| `GEMINI_API_KEY` | API Key global de Google Gemini 3.6 | `AIzaSy...` |
 
 ### En Supabase Edge Functions (Consola de Supabase)
 | Variable | Descripción | Ejemplo |
 | :--- | :--- | :--- |
-| `GEMINI_API_KEY` | API Key global de Google Gemini 2.5 | `AIzaSy...` |
+| `GEMINI_API_KEY` | API Key global de Google Gemini 3.6 | `AIzaSy...` |
 
 ---
 
